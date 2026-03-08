@@ -1,0 +1,494 @@
+Blinkist-Style Summary & Audio Learning App Business Requirements Document (BRD) Software Requirements Specification (SRS) Architecture, UX, UML, Delivery Roadmap
+ Technology baseline: Flutter + Django + PostgreSQL + Object Storage + CDN
+Purpose: a real-world blueprint for building a production-grade mobile app for reading and listening to concise book summaries, with subscriptions, offline playback, analytics, content operations, and scalable backend services.  Assumption: this document defines an original product inspired by the summary-learning category. It does not reuse proprietary branding, copy, or design assets from any third party.
+Prepared for product planning and implementation
+
+Document Map
+1. Executive summary and product vision
+2. Business Requirements Document (BRD)
+3. Software Requirements Specification (SRS)
+4. Product design, UX, and design system
+5. Technical architecture and deployment
+6. Data model, API modules, and security
+7. Delivery plan, testing, operations, and KPIs
+8. UML diagram appendix
+Executive Summary
+This document specifies a production-grade “Blinkist-style” mobile product that helps users discover nonfiction titles, consume high-quality original summaries, and switch seamlessly between reading and audio. The target stack is Flutter for user-facing mobile apps and Django for backend, content operations, and APIs. The platform is designed for real-life commercial use, with subscription billing, editorial workflows, rights-aware content operations, analytics, offline access, push notifications, and scalable media delivery.
+The scope includes a consumer reader app, an editor/admin console, a Django service layer, and cloud infrastructure. The product is structured to support phase-wise growth: MVP launch, catalog expansion, personalization, and enterprise-grade reliability. The document intentionally covers both business and engineering viewpoints so a product team can move from planning to execution with minimal ambiguity.
+Product Vision
+Deliver the fastest, most trustworthy way for busy users to understand books through concise text + audio experiences that can be consumed in short sessions across devices.
+Product Goals
+Enable users to finish a quality summary in 10–20 minutes by reading, listening, or mixing both.
+Provide a polished premium experience with strong retention, resumable playback, and offline access.
+Support a scalable editorial pipeline for rights-managed, original summary content and audio assets.
+Establish a secure, observable, and monetizable architecture that can grow from MVP to multi-market product.
+Business Requirements Document (BRD)
+Problem Statement
+Professionals and students often want the core ideas of a book without committing several hours to full-length reading. Existing learning apps prove demand for fast, high-signal content, but the opportunity remains to build a differentiated product with editorial quality, multilingual expansion capability, stronger creator workflows, and modern mobile UX.
+Business Objectives
+ID
+Objective
+Success Measure
+BO-01
+Launch an MVP with paid subscriptions and a curated initial catalog
+App store release + ≥ 1,000 active users in launch window
+BO-02
+Achieve healthy engagement with mixed read/listen behavior
+Median weekly sessions ≥ 3; completion rate ≥ 35%
+BO-03
+Prove monetization viability
+Subscriber conversion ≥ 3–5% from active free users
+BO-04
+Operationalize content publishing
+New summary publish cycle ≤ 5 working days after editorial approval
+BO-05
+Build a scalable technical base
+99.9% monthly API uptime and sub-300ms p95 catalog responses
+In Scope
+Consumer mobile apps for iOS and Android in Flutter.
+Email/social sign-in, onboarding, personalization preferences, and profile management.
+Catalog browsing, search, category pages, book detail pages, text summaries, audio summaries, bookmarks, highlights, and progress sync.
+Offline downloads for entitled users, streaming audio, speed controls, and resumable playback.
+Subscription flows, entitlement checks, billing sync, and restore purchases.
+Admin/editor workflows for catalog management, summary editing, audio upload/generation orchestration, QA, publishing, and analytics dashboards.
+Django APIs, PostgreSQL database, object storage, caching, queue workers, and observability.
+Out of Scope for MVP
+User-generated summaries or open marketplace authoring.
+Full-length audiobook hosting at launch.
+Complex social networking, public comments, or community rooms.
+Desktop-native apps; web can be phase 2 or limited admin portal only.
+Stakeholders
+Role
+Interest / Responsibility
+Founder / Product Owner
+Vision, prioritization, commercial outcomes, rights strategy
+Engineering Lead
+Architecture, delivery quality, performance, security
+Flutter Team
+Mobile UX, playback, offline, app-store readiness
+Django Team
+API design, admin CMS, data integrity, async jobs
+Editorial Lead
+Summary standards, tone, content QA, release quality
+Design Lead
+Design system, usability, accessibility, motion and polish
+Operations / Support
+Billing issues, moderation, incident communication
+Legal / Rights Owner
+Distribution rights, content approvals, compliance
+Target Users & Personas
+Persona A – Busy Professional: Age 24–40. Wants fast insight from productivity, business, psychology, and leadership books. Consumes during commute or gym sessions. Values speed, reliability, and premium feel.
+Persona B – Student / Self-Learner: Age 18–28. Uses summaries to evaluate which books to read fully later. Prefers highlighted takeaways, search, and affordable plans.
+Persona C – Knowledge Collector: Habitual reader who wants organized progress, recommendations, and cross-device continuity. Most likely to subscribe annually.
+Persona D – Editor / Content Ops: Internal user who needs a smooth review-publish process, metadata controls, and auditability.
+Value Proposition
+Dimension
+Product Promise
+Speed
+High-signal summaries consumable in short sessions
+Flexibility
+Switch between reading and listening without losing place
+Quality
+Original editorial summaries with consistent structure and tone
+Convenience
+Offline access, resume, speed control, bookmarking
+Trust
+Rights-aware content operations, secure billing, stable playback
+Business Rules
+Only content with verified rights and approved metadata may be published.
+Premium-only features (e.g., downloads) require active entitlement.
+User progress must sync server-side when connectivity exists and resolve conflicts deterministically.
+Billing status from app stores or Stripe is the source of truth for entitlement state.
+Removed or expired titles remain inaccessible for new consumption but existing user history should remain auditable.
+Revenue Model
+Free tier: limited catalog access, partial previews, onboarding recommendations.
+Premium monthly / annual plans: full catalog, offline downloads, higher-speed playback, optional bonus collections.
+Promotions: free trials, referral codes, editorial bundles, partnership offers.
+Potential phase 2: B2B team learning licenses or institutional access.
+Software Requirements Specification (SRS)
+System Overview
+The solution comprises: (1) Flutter Reader App, (2) Admin/Editor Interface, (3) Django REST API + background jobs, (4) PostgreSQL + Redis + object storage, and (5) third-party services for payments, notifications, and analytics.
+Assumptions & Constraints
+Phase 1 supports English content, but architecture must support future multilingual catalogs.
+Audio assets may be human-recorded or generated, but publishing requires QA approval.
+Consumer experience must feel responsive on mid-range devices and variable networks.
+Flutter app must support iOS and Android from a shared codebase with platform-specific billing integrations.
+Django admin / CMS may use Django Admin + custom React/HTMX pages or a Flutter web/React panel, but API contracts remain stable.
+Functional Requirements
+ID
+Module
+Requirement
+FR-01
+Authentication
+Users can sign up/sign in with email OTP/passwordless or social providers and manage session state.
+FR-02
+Onboarding
+Users can select interests, preferred topics, and listening preferences during first launch.
+FR-03
+Catalog Browse
+Users can browse featured collections, categories, trending titles, and continue-learning rails.
+FR-04
+Search
+Users can search by book title, author, topic, and tags with ranked results.
+FR-05
+Book Detail
+Users can view cover, metadata, duration, chapters/sections, preview, and CTA to read/listen.
+FR-06
+Reading Experience
+Users can read section-wise summaries with typography controls, progress tracking, and last-read resume.
+FR-07
+Audio Experience
+Users can stream audio summaries with play/pause, seek, skip, speed, sleep timer, and lock-screen integration.
+FR-08
+Read/Listen Sync
+Reading and audio playback share a unified progress model and resume position.
+FR-09
+Bookmarks & Highlights
+Users can bookmark books/sections and optionally save short notes/highlights.
+FR-10
+Downloads
+Entitled users can download audio and summary payloads for offline access and manage storage.
+FR-11
+Recommendations
+System provides personalized and rule-based recommendations on home and detail pages.
+FR-12
+Subscription
+Users can view plans, subscribe, restore purchases, and see billing status.
+FR-13
+Notifications
+System can send lifecycle, content release, re-engagement, and billing notifications.
+FR-14
+Content CMS
+Editors can create books, sections, metadata, upload assets, draft/review/publish content.
+FR-15
+Analytics
+Admins can view consumption, subscriber, retention, and catalog performance analytics.
+FR-16
+Support Tools
+Ops can search users, inspect entitlements, resolve content/purchase issues, and log actions.
+Detailed Consumer User Stories
+ID
+Story
+US-01
+As a new user, I want a short onboarding so the home feed immediately reflects my interests.
+US-02
+As a commuter, I want one-tap resume so I can continue where I stopped without searching.
+US-03
+As a subscriber, I want offline downloads so I can listen without network coverage.
+US-04
+As a learner, I want synchronized progress between read and listen modes so I do not lose context.
+US-05
+As a budget-conscious user, I want free previews before paying so I can judge content quality.
+US-06
+As an editor, I want draft/review/publish states so content is not released accidentally.
+US-07
+As support staff, I want a user entitlement timeline so I can diagnose billing issues quickly.
+Acceptance Criteria Samples
+Feature
+Acceptance Criteria
+Sign in
+Successful login returns user profile, token pair, onboarding status, and home payload without app restart.
+Book detail
+Detail page loads cover, author, durations, section list, preview availability, and entitlement CTA in one orchestrated response.
+Audio resume
+If a user closes the app mid-section, reopening on the same or another device resumes within ±5 seconds of last synced position.
+Offline mode
+Downloaded summaries/audio remain playable with network disabled until entitlement expiry or manual removal.
+Publish flow
+Only content in Approved state can be published; publish action stamps approver, time, and version.
+Non-Functional Requirements
+ID
+Category
+Requirement
+NFR-01
+Performance
+Catalog/home APIs p95 < 300ms, book detail p95 < 450ms under nominal load.
+NFR-02
+Availability
+Monthly uptime target 99.9% for public APIs.
+NFR-03
+Scalability
+System must scale horizontally for API and worker traffic; assets served via CDN.
+NFR-04
+Security
+JWT/OAuth session management, TLS everywhere, encrypted secrets, signed asset access, audit logs.
+NFR-05
+Privacy
+Collect only necessary personal data, provide delete/export workflows, protect notes/bookmarks.
+NFR-06
+Reliability
+Idempotent webhooks/jobs; replay-safe billing sync and progress sync.
+NFR-07
+Accessibility
+Meet WCAG-informed mobile accessibility practices: scalable type, focus order, contrast, semantics.
+NFR-08
+Observability
+Structured logs, metrics, traces, release health, crash analytics, alerting runbooks.
+NFR-09
+Maintainability
+Modular Flutter layers and Django apps with testable boundaries and clear ownership.
+NFR-10
+Portability
+Infrastructure should support cloud migration with minimal vendor lock-in.
+Product Design, UI, and UX Specification
+Experience Principles
+Fast first impression: users should understand value within 10 seconds of first launch.
+Progressive depth: home is lightweight, book detail adds context, reader/player focuses on immersion.
+Seamless mode switching: reading and listening feel like one continuous experience.
+Minimal friction: one-thumb interaction, clear CTAs, low cognitive load, high visual clarity.
+Trustworthy premium feel: calm typography, deliberate spacing, polished motion, no clutter.
+Information Architecture
+Primary Surface
+Purpose
+Splash / Auth
+Brand handoff, session restoration, login/signup
+Onboarding
+Capture interests, goals, and notification consent
+Home
+Discovery, continue-learning, recommendations, featured collections
+Explore / Search
+Search results, categories, filters, curated themes
+Book Detail
+Metadata, section list, preview, actions, recommendations
+Reader
+Text consumption, bookmarking, progress, typography controls
+Player
+Playback controls, queue/section list, speed, timer, device controls
+Library
+Saved titles, downloads, history
+Profile
+Plan, settings, notifications, preferences, legal, support
+Design System
+Token
+Definition
+Color palette
+Primary deep teal/navy, warm accent for CTA, neutral grays, semantic success/warning/error states.
+Typography
+Readable modern sans; H1 28, H2 20, H3 16, body 15/16; generous line height for reading surfaces.
+Spacing scale
+4 / 8 / 12 / 16 / 24 / 32 / 48 px; cards and sheets follow consistent rhythm.
+Shapes
+Rounded cards/buttons (12–20 px), minimal borders, soft shadows only where useful.
+Motion
+Short easing for transitions, player expansion, tab changes, and feedback micro-interactions.
+Icons
+Simple filled/outlined icon set; always paired with labels in ambiguous contexts.
+Components
+App bars, tab rails, carousels, section cards, stat chips, CTA buttons, bottom sheets, paywalls.
+Key UI Flows
+Onboarding: Launch → auth/session restore → choose interests → choose reading/listening goals → push permission prompt → home
+Discovery to Playback: Home rail/search → book detail → tap listen → player opens at section 1 or resume point → background playback
+Discovery to Reading: Home/search → book detail → tap read → section list → reader → next section
+Subscription: Soft paywall trigger → compare plans → platform checkout → webhook/receipt validation → entitlement unlock
+Offline Download: Book detail or library → download CTA → progress indicator → local available state → offline play/read
+UX Requirements by Surface
+Surface
+UX Requirements
+Home
+Personalized rails, quick resume, low-latency skeletons, prominent search, curated collections, A/B-ready modules.
+Book Detail
+Immediate value proof, section count, listen/read durations, preview capability, clear premium gating.
+Reader
+Distraction-free layout, progress indicator, previous/next section, save/highlight, accessible typography options.
+Player
+Large transport controls, speed, timer, queue/section list, artwork, background and lock-screen behavior.
+Paywall
+Benefit-led copy, plan comparison, trial messaging, restore purchases, trust/legal links.
+Settings
+Download quality, cellular download toggle, autoplay, notifications, theme, account actions.
+Accessibility & Inclusive Design
+Support system font scaling without clipped layouts.
+Ensure controls are reachable by screen readers with meaningful labels and focus order.
+Maintain contrast ratios for body text, controls, and disabled states.
+Provide captions/transcripts for audio where feasible and downloadable text as fallback.
+Avoid color-only meaning; pair semantic states with iconography and text.
+Technical Architecture
+Recommended Solution Architecture
+Flutter app uses clean feature modules and offline-friendly local storage. Django exposes versioned REST APIs and manages editorial workflows, billing synchronization, and recommendation orchestration. Redis supports caching and queues; Celery handles background jobs. Audio and cover assets live in object storage behind a CDN with signed URLs for protected delivery.
+Flutter Architecture
+Presentation: feature-first modules (auth, home, explore, book, reader, player, library, profile).
+State management: Riverpod or Bloc for predictable async state; one consistent pattern across app.
+Domain layer: use-cases for fetch catalog, fetch detail, start playback, sync progress, manage downloads, validate entitlement.
+Data layer: repositories wrapping REST client, local cache (Hive/Isar/SQLite), secure token store, and download manager.
+Media layer: just_audio / audio_service for background playback, notification controls, headset actions, and persistence.
+Offline strategy: cache metadata + downloaded assets; queue progress sync and bookmarks when offline.
+Django Architecture
+Apps: accounts, catalog, summaries, media, subscriptions, progress, recommendations, analytics, support, notifications.
+API style: REST with versioned endpoints and JWT/OAuth session strategy.
+Admin/CMS: Django Admin plus custom editorial pages for richer workflows.
+Async jobs: Celery for recommendation refresh, metadata indexing, image processing, asset validation, analytics aggregation, and notification fan-out.
+Search: PostgreSQL full-text initially; optional Elasticsearch/OpenSearch in scale phase.
+Caching: Redis for home payloads, book detail fragments, entitlement lookups, and search suggestions.
+Deployment & Environment Strategy
+Environment
+Purpose
+Local
+Feature development, seeded sample data, mocked billing and notifications
+Dev
+Shared integration environment, feature QA, preview builds
+Staging
+Production-like verification, load testing, release candidate signoff
+Production
+Public service with autoscaling, backups, alerting, and incident management
+Core API Modules
+Module
+Representative Endpoints
+Auth
+POST /auth/login, POST /auth/social, POST /auth/logout, GET /me
+Catalog
+GET /books, GET /books/{slug}, GET /categories, GET /collections
+Search
+GET /search?q=, GET /search/suggestions
+Progress
+GET /progress/{book_id}, PATCH /progress/{book_id}, POST /progress/bulk-sync
+Bookmarks
+GET /bookmarks, POST /bookmarks, DELETE /bookmarks/{id}
+Downloads
+GET /downloads/entitlements, POST /downloads/token
+Subscriptions
+GET /plans, POST /purchases/validate, POST /purchases/restore
+Recommendations
+GET /recommendations/home, GET /recommendations/book/{id}
+CMS
+POST /cms/books, PATCH /cms/sections/{id}, POST /cms/publish/{id}
+Data Model and Content Model
+A normalized relational schema is sufficient for MVP. The primary entities are User, Book, SummarySection, Plan, Subscription, UserBookProgress, Bookmark, Highlight, Collection, Recommendation Impression, and Editorial Audit Log.
+Key Data Objects
+Entity
+Notes
+User
+Authentication identity, profile, interests, notification settings, lifecycle state
+Book
+Commercial metadata, language, rights metadata, publish status, artwork, durations, SEO fields
+SummarySection
+Ordered narrative chunks; each may have text, audio, duration, transcript version
+Subscription
+Source platform, current entitlement state, renewal/expiry timeline
+Progress
+Current section, read percentage, audio position, cross-device resume state
+EditorialVersion
+Track copy revisions, approver, publish timestamps, rollback support
+AnalyticsEvent
+Client/server events for funnel, engagement, playback, and conversion
+Security, Privacy, and Compliance
+Use HTTPS/TLS for all traffic; store secrets in managed secret vaults; rotate service credentials.
+Protect media with signed URLs and expiry windows; avoid exposing raw bucket URLs in clients.
+Implement role-based access control for admin/editor functions.
+Record audit trails for content changes, entitlement changes, and support interventions.
+Provide account deletion and data export workflows consistent with target-market privacy laws.
+Validate purchase receipts/webhooks idempotently and maintain billing event ledger.
+Rate limit authentication, search abuse, and download token generation endpoints.
+Analytics and Product Measurement
+Metric Group
+Examples
+Acquisition
+Installs, signup completion, trial start, referral conversions
+Activation
+First book opened, first section completed, first listen session
+Engagement
+DAU/WAU, sessions per user, average listen minutes, completion rate
+Retention
+D1/D7/D30 retention, cohort progression, reactivation
+Monetization
+Trial-to-paid conversion, MRR/ARR, churn, restore purchases
+Catalog health
+Book opens by title, completion by category, low-performing sections, playback failure rate
+Delivery Planning and Quality Strategy
+Testing Strategy
+Flutter: unit tests for use-cases, widget tests for critical screens, integration tests for auth, browse, playback, and paywall flows.
+Django: unit tests for domain logic, API tests, permission tests, webhook tests, contract tests, and migration checks.
+Performance: synthetic load tests on home, detail, search, and progress sync endpoints; playback startup metrics from client analytics.
+Security: dependency scanning, static analysis, secret scanning, auth abuse checks, and admin permission reviews.
+Release QA: smoke checklist covering login, preview, subscription, playback, resume, offline, restore purchase, and CMS publish.
+MVP Delivery Roadmap
+Phase
+Scope
+Phase 0 – Foundation
+Design system, project setup, CI/CD, auth, base Flutter/Django architecture, sample seed data
+Phase 1 – Consumer Core
+Home, search, book detail, reader, player, progress sync, bookmarks, analytics events
+Phase 2 – Monetization & Offline
+Plans, purchases, entitlement sync, paywalls, downloads, restore purchases
+Phase 3 – Editorial Ops
+CMS, draft/review/publish workflow, asset management, analytics dashboards
+Phase 4 – Optimization
+Personalization, experiments, growth loops, recommendation tuning, stability hardening
+Resourcing Suggestion
+Role
+Suggested Count
+Product manager / founder
+1
+UI/UX designer
+1
+Flutter engineers
+2–3
+Django engineers
+2
+QA engineer
+1
+DevOps / cloud
+0.5–1
+Content/editorial staff
+2+
+Major Risks and Mitigations
+Risk
+Mitigation
+Content quality inconsistency
+Define editorial playbook, templates, and mandatory QA signoff before publish.
+Billing edge cases across platforms
+Receipt/webhook ledger, idempotent handlers, sandbox regression suite, support tooling.
+Playback / download instability
+Use proven media libraries, signed URL refresh, background playback QA, asset validation jobs.
+Low retention after trial
+Improve onboarding, resume prompts, weekly release cadence, push/email re-engagement.
+Catalog scaling pain
+Modular CMS, metadata import templates, versioning, bulk publish tooling.
+Security/privacy incident
+Least privilege, audit logs, monitoring, backups, incident response plan.
+Operational Readiness Checklist
+Runbooks for login incidents, playback failure, billing mismatch, and asset corruption.
+Backup and restore tested for PostgreSQL and critical object storage metadata.
+App store review materials, privacy policy, terms, and support contact pages ready.
+Content moderation / takedown flow documented for rights changes or legal issues.
+Monitoring dashboards and alert thresholds finalized before public launch.
+UML and Analysis Diagram Appendix
+The following diagrams provide implementation-level planning support for product, design, backend, and mobile teams.
+System Context Diagram
+
+System Context Diagram
+Use Case Diagram
+
+Use Case Diagram
+Component Diagram
+
+Component Diagram
+Deployment Diagram
+
+Deployment Diagram
+Entity Relationship Diagram
+
+Entity Relationship Diagram
+Domain Class Diagram
+
+Domain Class Diagram
+Sequence Diagram - Login
+
+Sequence Diagram - Login
+Sequence Diagram - Audio Playback
+
+Sequence Diagram - Audio Playback
+Activity Diagram - Content Publishing
+
+Activity Diagram - Content Publishing
+State Diagram - Subscription Lifecycle
+
+State Diagram - Subscription Lifecycle
+Recommended Project Folder Structure
+Flutter (example): lib/src/features/{auth,home,explore,book,reader,player,library,profile}/ + core/{networking,storage,theme,analytics}. Django (example): apps/{accounts,catalog,summaries,subscriptions,progress,recommendations,analytics,notifications,support}.
+Recommended Documentation Set Beyond This File
+API contract collection (OpenAPI/Swagger)
+Figma design file with final screens, components, and tokens
+Content operations SOP and editorial style guide
+Test plan and regression checklist
+Incident response and backup/restore runbook
+App store submission checklist and legal pack

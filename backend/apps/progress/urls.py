@@ -1,0 +1,7 @@
+from django.urls import path
+from .views import ReadProgressView, MarkSectionReadView
+
+urlpatterns = [
+    path('books/<int:book_id>/', ReadProgressView.as_view(), name='book_progress'),
+    path('books/<int:book_id>/section/<int:section_id>/', MarkSectionReadView.as_view(), name='mark_section_read'),
+]
