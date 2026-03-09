@@ -4,6 +4,47 @@ import 'package:go_router/go_router.dart';
 import '../data/content_repository.dart';
 import '../domain/book_models.dart';
 
+class _CtaRow extends StatelessWidget {
+  final BookDetail book;
+
+  const _CtaRow({required this.book});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAudio = book.sections.any((s) => s.audioUrl != null);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Listen Summary (primary)
+        FilledButton.icon(
+          icon: const Icon(Icons.headphones),
+          label: Text(hasAudio ? 'Listen Summary' : 'Audio Coming Soon'),
+          onPressed: hasAudio && book.sections.isNotEmpty
+              ? () => context.push('/books/${book.slug}/listen')
+              : null,
+        ),
+        const SizedBox(height: 8),
+        // Read Summary (secondary)
+        OutlinedButton.icon(
+          icon: const Icon(Icons.menu_book_outlined),
+          label: const Text('Read Summary'),
+          onPressed: book.sections.isNotEmpty
+              ? () => context.push('/books/${book.slug}/read')
+              : null,
+        ),
+        const SizedBox(height: 8),
+        // Read Full Book (tertiary text link)
+        TextButton.icon(
+          icon: const Icon(Icons.book_outlined),
+          label: const Text('Read Full Book'),
+          onPressed: null, // future route
+        ),
+      ],
+    );
+  }
+}
+
 class BookDetailScreen extends ConsumerWidget {
   final String slug;
 
@@ -66,20 +107,7 @@ class BookDetailScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () {
-                          // Navigate to Reader.
-                          // When implemented, it should fetch User Progress first and jump to 'current_section'.
-                          // For now, jumping to the first section.
-                          if (book.sections.isNotEmpty) {
-                            context.push('/books/${book.slug}/read');
-                          }
-                        },
-                        child: const Text('Read Now'),
-                      ),
-                    ),
+                    _CtaRow(book: book),
                     const SizedBox(height: 32),
                     Text(
                       'What\'s it about?',
@@ -110,6 +138,12 @@ class BookDetailScreen extends ConsumerWidget {
                           child: Text('${section.order}'),
                         ),
                         title: Text(section.title),
+                        trailing: section.durationSeconds > 0
+                            ? Text(
+                                '${(section.durationSeconds / 60).ceil()} min',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              )
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 48), // Padding at bottom

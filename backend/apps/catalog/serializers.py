@@ -21,6 +21,9 @@ class SummarySectionListSerializer(serializers.ModelSerializer):
 
     def get_audio_url(self, obj):
         if obj.audio_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.audio_file.url)
             return obj.audio_file.url
         return None
 
@@ -36,6 +39,9 @@ class BookListSerializer(serializers.ModelSerializer):
 
     def get_cover_image_url(self, obj):
         if obj.cover_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.cover_image.url)
             return obj.cover_image.url
         return None
 
