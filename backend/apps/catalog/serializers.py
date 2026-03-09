@@ -54,4 +54,4 @@ class BookDetailSerializer(BookListSerializer):
     sections = SummarySectionDetailSerializer(many=True, read_only=True)
     
     class Meta(BookListSerializer.Meta):
-        fields = BookListSerializer.Meta.fields + ('description', 'what_you_will_learn', 'sections')
+        fields = BookListSerializer.Meta.fields + ('description', 'what_you_will_learn', 'full_text', 'sections')

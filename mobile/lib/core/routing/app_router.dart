@@ -6,6 +6,7 @@ import '../../src/features/explore/presentation/explore_screen.dart';
 import '../../src/features/book/presentation/book_detail_screen.dart';
 import '../../src/features/reader/presentation/reader_screen.dart';
 import '../../src/features/reader/presentation/audio_player_screen.dart';
+import '../../src/features/reader/presentation/full_book_screen.dart';
 
 // Keys for nested navigation
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -50,6 +51,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final slug = state.pathParameters['slug']!;
           return AudioPlayerScreen(slug: slug);
+        },
+      ),
+      GoRoute(
+        path: '/books/:slug/full',
+        builder: (context, state) {
+          final slug = state.pathParameters['slug']!;
+          return FullBookScreen(slug: slug);
         },
       ),
     ],

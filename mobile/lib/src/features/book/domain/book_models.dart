@@ -40,6 +40,7 @@ class SummarySection {
 class BookDetail extends Book {
   final String description;
   final String whatYouWillLearn;
+  final String fullText;
   final List<SummarySection> sections;
 
   BookDetail({
@@ -54,6 +55,7 @@ class BookDetail extends Book {
     required super.isPremium,
     required this.description,
     required this.whatYouWillLearn,
+    required this.fullText,
     required this.sections,
   });
 
@@ -72,6 +74,7 @@ class BookDetail extends Book {
       isPremium: json['is_premium'] ?? false,
       description: json['description'] ?? '',
       whatYouWillLearn: json['what_you_will_learn'] ?? '',
+      fullText: json['full_text'] ?? '',
       sections: (json['sections'] as List? ?? [])
           .map((s) => SummarySection.fromJson(s))
           .toList(),
