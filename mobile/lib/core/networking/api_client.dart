@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// Use 'http://10.0.2.2:8001/api/v1' for Android emulator
-// Use 'http://localhost:8001/api/v1' for iOS simulator
-const String kApiBaseUrl = 'http://localhost:8001/api/v1';
+String get kApiBaseUrl {
+  if (kIsWeb) return 'http://localhost:8001/api/v1';
+  if (Platform.isAndroid) return 'http://10.0.2.2:8001/api/v1';
+  return 'http://localhost:8001/api/v1';
+}
 
 String resolveServerUrl(String url) {
   final parsed = Uri.tryParse(url);

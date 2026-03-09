@@ -33,6 +33,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                 audioState.totalSections == book.sections.length;
             if (!isAlreadyLoaded) {
               controller.loadBook(
+                bookId: book.id,
                 bookSlug: book.slug,
                 bookTitle: book.title,
                 sections: book.sections,
@@ -49,10 +50,21 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   }
 }
 
-class _PlayerView extends ConsumerWidget {
+class _PlayerView extends ConsumerStatefulWidget {
   final BookDetail book;
 
   const _PlayerView({required this.book});
+
+  @override
+  ConsumerState<_PlayerView> createState() => _PlayerViewState();
+}
+
+class _PlayerViewState extends ConsumerState<_PlayerView> {
+  BookDetail get book => widget.book;
+
+  // Dragging state — while scrubbing, freeze the displayed position
+  bool _isSeeking = false;
+  double _seekValue = 0.0;
 
   String _formatDuration(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -60,11 +72,7 @@ class _PlayerView extends ConsumerWidget {
     return '$m:$s';
   }
 
-  void _showChapterDrawer(
-    BuildContext context,
-    WidgetRef ref,
-    AudioState audioState,
-  ) {
+  void _showChapterDrawer(BuildContext context, AudioState audioState) {
     showModalBottomSheet(
       context: context,
       builder: (_) => Column(
@@ -119,7 +127,7 @@ class _PlayerView extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final audioState = ref.watch(audioControllerProvider);
     final controller = ref.read(audioControllerProvider.notifier);
     final isThisBook = audioState.bookSlug == book.slug;
@@ -163,11 +171,6 @@ class _PlayerView extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.list),
-            tooltip: 'Chapters',
-            onPressed: () => _showChapterDrawer(context, ref, audioState),
           ),
         ],
       ),
@@ -241,25 +244,52 @@ class _PlayerView extends ConsumerWidget {
                   child: Row(
                     children: [
                       Text(
-                        _formatDuration(position),
+                        _isSeeking
+                            ? _formatDuration(
+                                Duration(
+                                  milliseconds:
+                                      (_seekValue * duration.inMilliseconds)
+                                          .round(),
+                                ),
+                              )
+                            : _formatDuration(position),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       Expanded(
                         child: Slider(
-                          value: progress.clamp(0.0, 1.0),
+                          value: _isSeeking
+                              ? _seekValue
+                              : progress.clamp(0.0, 1.0),
+                          onChangeStart: (val) {
+                            setState(() {
+                              _isSeeking = true;
+                              _seekValue = val;
+                            });
+                          },
                           onChanged: (val) {
+                            setState(() => _seekValue = val);
+                          },
+                          onChangeEnd: (val) {
                             final newPos = Duration(
                               milliseconds: (val * duration.inMilliseconds)
                                   .round(),
                             );
                             controller.seek(newPos);
+                            setState(() => _isSeeking = false);
                           },
                         ),
                       ),
-                      Text(
-                        '-${_formatDuration(remaining.isNegative ? Duration.zero : remaining)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                      Text(() {
+                        final displayPos = _isSeeking
+                            ? Duration(
+                                milliseconds:
+                                    (_seekValue * duration.inMilliseconds)
+                                        .round(),
+                              )
+                            : position;
+                        final rem = duration - displayPos;
+                        return '-${_formatDuration(rem.isNegative ? Duration.zero : rem)}';
+                      }(), style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
                 ),
@@ -282,11 +312,15 @@ class _PlayerView extends ConsumerWidget {
                         },
                         child: Text('${audioState.playbackSpeed}x'),
                       ),
-                      // Previous
-                      IconButton(
-                        iconSize: 36,
-                        icon: const Icon(Icons.skip_previous),
-                        onPressed: () => controller.skipPrevious(),
+                      // Seek back 15s
+                      _SeekButton(
+                        seconds: -15,
+                        onTap: () {
+                          final newPos = position - const Duration(seconds: 15);
+                          controller.seek(
+                            newPos.isNegative ? Duration.zero : newPos,
+                          );
+                        },
                       ),
                       // Play / Pause
                       audioState.isLoading
@@ -304,17 +338,23 @@ class _PlayerView extends ConsumerWidget {
                               ),
                               onPressed: () => controller.togglePlayPause(),
                             ),
-                      // Next
-                      IconButton(
-                        iconSize: 36,
-                        icon: const Icon(Icons.skip_next),
-                        onPressed:
-                            audioState.currentIndex < book.sections.length - 1
-                            ? () => controller.skipNext()
-                            : null,
+                      // Seek forward 30s
+                      _SeekButton(
+                        seconds: 30,
+                        onTap: () {
+                          final newPos = position + const Duration(seconds: 30);
+                          controller.seek(
+                            newPos > duration ? duration : newPos,
+                          );
+                        },
                       ),
-                      // Placeholder for symmetry
-                      const SizedBox(width: 48),
+                      // Chapters list
+                      IconButton(
+                        icon: const Icon(Icons.list),
+                        tooltip: 'Chapters',
+                        onPressed: () =>
+                            _showChapterDrawer(context, audioState),
+                      ),
                     ],
                   ),
                 ),
@@ -323,6 +363,22 @@ class _PlayerView extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SeekButton extends StatelessWidget {
+  final int seconds; // negative = rewind, positive = forward
+  final VoidCallback onTap;
+
+  const _SeekButton({required this.seconds, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isForward = seconds > 0;
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(isForward ? Icons.forward_30 : Icons.replay_10, size: 36),
     );
   }
 }

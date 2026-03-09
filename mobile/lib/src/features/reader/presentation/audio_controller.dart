@@ -4,7 +4,10 @@ import 'package:just_audio/just_audio.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/domain/book_models.dart';
 
+import '../../progress/data/progress_repository.dart';
+
 class AudioState {
+  final int? bookId;
   final String? bookSlug;
   final String? bookTitle;
   final int totalSections;
@@ -18,6 +21,7 @@ class AudioState {
   final String? errorMessage;
 
   const AudioState({
+    this.bookId,
     this.bookSlug,
     this.bookTitle,
     this.totalSections = 0,
@@ -32,6 +36,7 @@ class AudioState {
   });
 
   AudioState copyWith({
+    int? bookId,
     String? bookSlug,
     String? bookTitle,
     int? totalSections,
@@ -45,6 +50,7 @@ class AudioState {
     String? errorMessage,
   }) {
     return AudioState(
+      bookId: bookId ?? this.bookId,
       bookSlug: bookSlug ?? this.bookSlug,
       bookTitle: bookTitle ?? this.bookTitle,
       totalSections: totalSections ?? this.totalSections,
@@ -62,14 +68,16 @@ class AudioState {
 
 class AudioController extends StateNotifier<AudioState> {
   final AudioPlayer _player = AudioPlayer();
+  final ProgressRepository _progressRepository;
   List<SummarySection> _sections = [];
 
-  AudioController() : super(const AudioState()) {
+  AudioController(this._progressRepository) : super(const AudioState()) {
     _player.positionStream.listen((pos) {
       state = state.copyWith(currentPosition: pos);
     });
     _player.durationStream.listen((dur) {
-      state = state.copyWith(duration: dur);
+      // Only apply when the player resolves a precise value — never wipe with null
+      if (dur != null) state = state.copyWith(duration: dur);
     });
     _player.playingStream.listen((playing) {
       state = state.copyWith(isPlaying: playing);
@@ -81,19 +89,57 @@ class AudioController extends StateNotifier<AudioState> {
     });
   }
 
+  Future<void> _saveProgress({bool isFinished = false}) async {
+    if (state.bookId == null || currentSection == null) return;
+    try {
+      await _progressRepository.saveAudioProgress(
+        bookId: state.bookId!,
+        sectionId: currentSection!.id,
+        positionSeconds: state.currentPosition.inSeconds.toDouble(),
+        isFinished: isFinished,
+      );
+    } catch (e) {
+      debugPrint('Failed to save audio progress: $e');
+    }
+  }
+
   Future<void> loadBook({
+    required int bookId,
     required String bookSlug,
     required String bookTitle,
     required List<SummarySection> sections,
-    int startIndex = 0,
+    int? startIndex,
     bool autoPlay = false,
   }) async {
     _sections = sections;
+    int initialIndex = startIndex ?? 0;
+    Duration initialPosition = Duration.zero;
+
+    if (startIndex == null) {
+      try {
+        final progress = await _progressRepository.getAudioProgress(bookId);
+        if (progress.currentSectionId != null) {
+          final idx = sections.indexWhere(
+            (s) => s.id == progress.currentSectionId,
+          );
+          if (idx >= 0) {
+            initialIndex = idx;
+            initialPosition = Duration(
+              seconds: progress.currentPositionSeconds.toInt(),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to load audio progress (might be first time): $e');
+      }
+    }
+
     state = state.copyWith(
+      bookId: bookId,
       bookSlug: bookSlug,
       bookTitle: bookTitle,
       totalSections: sections.length,
-      currentIndex: startIndex,
+      currentIndex: initialIndex,
       isLoading: true,
       errorMessage: null,
     );
@@ -104,8 +150,12 @@ class AudioController extends StateNotifier<AudioState> {
       return;
     }
 
-    final normalizedStartIndex = startIndex.clamp(0, _sections.length - 1);
+    final normalizedStartIndex = initialIndex.clamp(0, _sections.length - 1);
     final loaded = await _loadSection(normalizedStartIndex);
+
+    if (initialPosition > Duration.zero) {
+      await _player.seek(initialPosition);
+    }
 
     if (!autoPlay) return;
     if (loaded) {
@@ -128,11 +178,25 @@ class AudioController extends StateNotifier<AudioState> {
     final section = _sections[index];
     final url = section.audioUrl?.trim();
 
-    state = state.copyWith(
+    // Use the section's known duration immediately so the UI has something to show
+    final sectionDuration = section.durationSeconds > 0
+        ? Duration(seconds: section.durationSeconds)
+        : null;
+
+    // Direct construction — copyWith can't set nullable fields to null
+    state = AudioState(
+      bookId: state.bookId,
+      bookSlug: state.bookSlug,
+      bookTitle: state.bookTitle,
+      totalSections: state.totalSections,
       currentIndex: index,
       currentSectionTitle: section.title,
       currentPosition: Duration.zero,
-      duration: null,
+      duration: sectionDuration,
+      isPlaying: state.isPlaying,
+      playbackSpeed: state.playbackSpeed,
+      isLoading: true,
+      errorMessage: null,
     );
 
     if (url == null || url.isEmpty) {
@@ -146,10 +210,25 @@ class AudioController extends StateNotifier<AudioState> {
     }
 
     try {
-      state = state.copyWith(isLoading: true, errorMessage: null);
       final resolvedUrl = resolveServerUrl(url);
-      await _player.setUrl(resolvedUrl);
-      state = state.copyWith(isLoading: false);
+      // setUrl returns Duration? — may be null if the server doesn't send headers
+      final dur = await _player.setUrl(resolvedUrl);
+      // Prefer the precise player duration; fall back to the section metadata
+      final effectiveDuration = dur ?? _player.duration ?? sectionDuration;
+      state = AudioState(
+        bookId: state.bookId,
+        bookSlug: state.bookSlug,
+        bookTitle: state.bookTitle,
+        totalSections: state.totalSections,
+        currentIndex: state.currentIndex,
+        currentSectionTitle: state.currentSectionTitle,
+        currentPosition: Duration.zero,
+        duration: effectiveDuration,
+        isPlaying: state.isPlaying,
+        playbackSpeed: state.playbackSpeed,
+        isLoading: false,
+        errorMessage: null,
+      );
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -162,6 +241,7 @@ class AudioController extends StateNotifier<AudioState> {
   }
 
   void _onSectionComplete() {
+    _saveProgress(isFinished: true);
     if (state.currentIndex < _sections.length - 1) {
       skipNext();
     } else {
@@ -170,13 +250,16 @@ class AudioController extends StateNotifier<AudioState> {
   }
 
   Future<void> play() => _player.play();
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    await _player.pause();
+    await _saveProgress();
+  }
 
   void togglePlayPause() {
     if (state.isPlaying) {
-      _player.pause();
+      pause();
     } else {
-      _player.play();
+      play();
     }
   }
 
@@ -191,6 +274,7 @@ class AudioController extends StateNotifier<AudioState> {
       }
     }
     await _player.stop();
+    await _saveProgress();
     state = state.copyWith(isPlaying: false);
   }
 
@@ -207,6 +291,7 @@ class AudioController extends StateNotifier<AudioState> {
         }
       }
       await _player.stop();
+      await _saveProgress();
       state = state.copyWith(isPlaying: false);
     }
   }
@@ -224,6 +309,7 @@ class AudioController extends StateNotifier<AudioState> {
   }
 
   Future<void> stop({bool clearQueue = false}) async {
+    await _saveProgress();
     await _player.stop();
     if (clearQueue) {
       _sections = [];
@@ -256,5 +342,6 @@ class AudioController extends StateNotifier<AudioState> {
 
 final audioControllerProvider =
     StateNotifierProvider<AudioController, AudioState>((ref) {
-      return AudioController();
+      final repo = ref.watch(progressRepositoryProvider);
+      return AudioController(repo);
     });

@@ -130,6 +130,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 icon: const Icon(Icons.headphones),
                 onPressed: hasAnyAudio && book.sections.isNotEmpty
                     ? () => audioController.loadBook(
+                        bookId: book.id,
                         bookSlug: book.slug,
                         bookTitle: book.title,
                         sections: book.sections,

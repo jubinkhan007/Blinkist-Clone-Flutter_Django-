@@ -2,8 +2,8 @@ from rest_framework import views, response, status, permissions
 from django.shortcuts import get_object_or_404
 from apps.catalog.models import Book
 from apps.summaries.models import SummarySection
-from .models import UserBookProgress, UserSectionProgress, UserAudioProgress
-from .serializers import UserBookProgressSerializer, UserAudioProgressSerializer
+from .models import UserBookProgress, UserSectionProgress, UserAudioProgress, UserSummaryProgress
+from .serializers import UserBookProgressSerializer, UserAudioProgressSerializer, UserSummaryProgressSerializer
 
 class ReadProgressView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -11,8 +11,8 @@ class ReadProgressView(views.APIView):
     def get(self, request, book_id):
         # GET /api/v1/progress/books/<book_id>/
         book = get_object_or_404(Book, id=book_id)
-        progress, _ = UserBookProgress.objects.get_or_create(user=request.user, book=book)
-        serializer = UserBookProgressSerializer(progress)
+        progress, _ = UserSummaryProgress.objects.get_or_create(user=request.user, book=book)
+        serializer = UserSummaryProgressSerializer(progress)
         return response.Response(serializer.data)
 
 class MarkSectionReadView(views.APIView):
@@ -31,8 +31,8 @@ class MarkSectionReadView(views.APIView):
         )
 
         # Update book progress
-        book_progress, _ = UserBookProgress.objects.get_or_create(user=request.user, book=book)
-        book_progress.current_section = section
+        summary_progress, _ = UserSummaryProgress.objects.get_or_create(user=request.user, book=book)
+        summary_progress.current_section = section
         
         # Recalculate percentage
         total_sections = book.sections.count()
@@ -42,14 +42,10 @@ class MarkSectionReadView(views.APIView):
             is_completed=True
         ).count()
         
-        if total_sections > 0:
-            book_progress.percent_complete = int((completed_sections_count / total_sections) * 100)
-            if book_progress.percent_complete == 100:
-                book_progress.is_completed = True
-                
-        book_progress.save()
+        summary_progress.completed_sections_count = completed_sections_count
+        summary_progress.save()
 
-        return response.Response(UserBookProgressSerializer(book_progress).data)
+        return response.Response(UserSummaryProgressSerializer(summary_progress).data)
 
 
 class AudioProgressView(views.APIView):

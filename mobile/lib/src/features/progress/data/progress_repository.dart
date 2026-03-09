@@ -4,28 +4,52 @@ import '../../../../core/networking/api_client.dart';
 
 part 'progress_repository.g.dart';
 
-class UserBookProgress {
+class UserSummaryProgress {
   final int id;
   final int bookId;
   final int? currentSectionId;
-  final int percentComplete;
-  final bool isCompleted;
+  final int completedSectionsCount;
 
-  UserBookProgress({
+  UserSummaryProgress({
     required this.id,
     required this.bookId,
     this.currentSectionId,
-    required this.percentComplete,
-    required this.isCompleted,
+    required this.completedSectionsCount,
   });
 
-  factory UserBookProgress.fromJson(Map<String, dynamic> json) {
-    return UserBookProgress(
+  factory UserSummaryProgress.fromJson(Map<String, dynamic> json) {
+    return UserSummaryProgress(
       id: json['id'],
       bookId: json['book'],
       currentSectionId: json['current_section'],
-      percentComplete: json['percent_complete'],
-      isCompleted: json['is_completed'],
+      completedSectionsCount: json['completed_sections_count'] ?? 0,
+    );
+  }
+}
+
+class UserAudioProgress {
+  final int id;
+  final int bookId;
+  final int? currentSectionId;
+  final double currentPositionSeconds;
+  final bool isFinished;
+
+  UserAudioProgress({
+    required this.id,
+    required this.bookId,
+    this.currentSectionId,
+    required this.currentPositionSeconds,
+    required this.isFinished,
+  });
+
+  factory UserAudioProgress.fromJson(Map<String, dynamic> json) {
+    return UserAudioProgress(
+      id: json['id'],
+      bookId: json['book'],
+      currentSectionId: json['current_section'],
+      currentPositionSeconds:
+          (json['current_position_seconds'] as num?)?.toDouble() ?? 0.0,
+      isFinished: json['is_finished'] ?? false,
     );
   }
 }
@@ -35,16 +59,38 @@ class ProgressRepository {
 
   ProgressRepository({required Dio dio}) : _dio = dio;
 
-  Future<UserBookProgress> getBookProgress(int bookId) async {
+  Future<UserSummaryProgress> getBookProgress(int bookId) async {
     final response = await _dio.get('/progress/books/$bookId/');
-    return UserBookProgress.fromJson(response.data);
+    return UserSummaryProgress.fromJson(response.data);
   }
 
-  Future<UserBookProgress> markSectionRead(int bookId, int sectionId) async {
+  Future<UserSummaryProgress> markSectionRead(int bookId, int sectionId) async {
     final response = await _dio.post(
       '/progress/books/$bookId/section/$sectionId/',
     );
-    return UserBookProgress.fromJson(response.data);
+    return UserSummaryProgress.fromJson(response.data);
+  }
+
+  Future<UserAudioProgress> getAudioProgress(int bookId) async {
+    final response = await _dio.get('/progress/books/$bookId/audio/');
+    return UserAudioProgress.fromJson(response.data);
+  }
+
+  Future<UserAudioProgress> saveAudioProgress({
+    required int bookId,
+    required int sectionId,
+    required double positionSeconds,
+    required bool isFinished,
+  }) async {
+    final response = await _dio.post(
+      '/progress/books/$bookId/audio/',
+      data: {
+        'section_id': sectionId,
+        'position_seconds': positionSeconds,
+        'is_finished': isFinished,
+      },
+    );
+    return UserAudioProgress.fromJson(response.data);
   }
 }
 
