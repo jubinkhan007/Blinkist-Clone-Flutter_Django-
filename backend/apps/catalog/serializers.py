@@ -2,6 +2,25 @@ from rest_framework import serializers
 from apps.catalog.models import Book, Category, Author
 from apps.summaries.models import SummarySection
 
+def _user_has_premium_access(request) -> bool:
+    """
+    Anonymous users never have premium access.
+    Authenticated users may have premium access via User.has_premium_access()
+    (trialing/active) or legacy is_premium flag.
+    """
+    if request is None:
+        return False
+
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return False
+
+    if hasattr(user, "has_premium_access"):
+        return bool(user.has_premium_access())
+
+    return bool(getattr(user, "is_premium", False))
+
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -20,8 +39,11 @@ class SummarySectionListSerializer(serializers.ModelSerializer):
         fields = ('id', 'slug', 'order', 'title', 'duration_seconds', 'estimated_read_minutes', 'audio_url')
 
     def get_audio_url(self, obj):
+        request = self.context.get('request')
+        if obj.book.is_premium and not _user_has_premium_access(request):
+            return None
+
         if obj.audio_file:
-            request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.audio_file.url)
             return obj.audio_file.url
@@ -47,11 +69,26 @@ class BookListSerializer(serializers.ModelSerializer):
 
 class SummarySectionDetailSerializer(SummarySectionListSerializer):
     """Includes full content for the reader screen."""
+    content = serializers.SerializerMethodField()
+
     class Meta(SummarySectionListSerializer.Meta):
         fields = SummarySectionListSerializer.Meta.fields + ('content',)
 
+    def get_content(self, obj):
+        request = self.context.get('request')
+        if obj.book.is_premium and not _user_has_premium_access(request):
+            return None
+        return obj.content
+
 class BookDetailSerializer(BookListSerializer):
     sections = SummarySectionDetailSerializer(many=True, read_only=True)
+    full_text = serializers.SerializerMethodField()
     
     class Meta(BookListSerializer.Meta):
         fields = BookListSerializer.Meta.fields + ('description', 'what_you_will_learn', 'full_text', 'sections')
+
+    def get_full_text(self, obj):
+        request = self.context.get('request')
+        if obj.is_premium and not _user_has_premium_access(request):
+            return None
+        return obj.full_text

@@ -7,6 +7,8 @@ import '../../src/features/book/presentation/book_detail_screen.dart';
 import '../../src/features/reader/presentation/reader_screen.dart';
 import '../../src/features/reader/presentation/audio_player_screen.dart';
 import '../../src/features/reader/presentation/full_book_screen.dart';
+import '../../src/features/profile/presentation/profile_screen.dart';
+import '../../src/features/subscription/presentation/paywall_screen.dart';
 
 // Keys for nested navigation
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -27,6 +29,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/explore',
             builder: (context, state) => const ExploreScreen(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (context, state) => const ProfileScreen(),
           ),
         ],
       ),
@@ -58,6 +64,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final slug = state.pathParameters['slug']!;
           return FullBookScreen(slug: slug);
+        },
+      ),
+      GoRoute(
+        path: '/paywall',
+        builder: (context, state) {
+          final slug = state.uri.queryParameters['slug'];
+          final title = state.uri.queryParameters['title'];
+          return PaywallScreen(bookSlug: slug, bookTitle: title);
         },
       ),
     ],
@@ -118,7 +132,7 @@ class AppScaffold extends StatelessWidget {
         context.go('/explore');
         break;
       case 2:
-        // context.go('/profile'); // To be implemented
+        context.go('/profile');
         break;
     }
   }

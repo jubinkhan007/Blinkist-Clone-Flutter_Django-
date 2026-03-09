@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/v1/catalog/', include('apps.catalog.urls')),
     path('api/v1/home/', include('apps.home.urls')),
     path('api/v1/progress/', include('apps.progress.urls')),
+    path('api/v1/payments/', include('apps.subscriptions.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

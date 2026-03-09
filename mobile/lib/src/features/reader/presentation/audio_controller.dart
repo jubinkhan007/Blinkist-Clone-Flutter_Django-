@@ -7,6 +7,8 @@ import '../../book/domain/book_models.dart';
 import '../../progress/data/progress_repository.dart';
 
 class AudioState {
+  static const Object _unset = Object();
+
   final int? bookId;
   final String? bookSlug;
   final String? bookTitle;
@@ -36,32 +38,36 @@ class AudioState {
   });
 
   AudioState copyWith({
-    int? bookId,
-    String? bookSlug,
-    String? bookTitle,
+    Object? bookId = _unset,
+    Object? bookSlug = _unset,
+    Object? bookTitle = _unset,
     int? totalSections,
     int? currentIndex,
-    String? currentSectionTitle,
+    Object? currentSectionTitle = _unset,
     Duration? currentPosition,
-    Duration? duration,
+    Object? duration = _unset,
     bool? isPlaying,
     double? playbackSpeed,
     bool? isLoading,
-    String? errorMessage,
+    Object? errorMessage = _unset,
   }) {
     return AudioState(
-      bookId: bookId ?? this.bookId,
-      bookSlug: bookSlug ?? this.bookSlug,
-      bookTitle: bookTitle ?? this.bookTitle,
+      bookId: bookId == _unset ? this.bookId : bookId as int?,
+      bookSlug: bookSlug == _unset ? this.bookSlug : bookSlug as String?,
+      bookTitle: bookTitle == _unset ? this.bookTitle : bookTitle as String?,
       totalSections: totalSections ?? this.totalSections,
       currentIndex: currentIndex ?? this.currentIndex,
-      currentSectionTitle: currentSectionTitle ?? this.currentSectionTitle,
+      currentSectionTitle: currentSectionTitle == _unset
+          ? this.currentSectionTitle
+          : currentSectionTitle as String?,
       currentPosition: currentPosition ?? this.currentPosition,
-      duration: duration ?? this.duration,
+      duration: duration == _unset ? this.duration : duration as Duration?,
       isPlaying: isPlaying ?? this.isPlaying,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       isLoading: isLoading ?? this.isLoading,
-      errorMessage: errorMessage ?? this.errorMessage,
+      errorMessage: errorMessage == _unset
+          ? this.errorMessage
+          : errorMessage as String?,
     );
   }
 }

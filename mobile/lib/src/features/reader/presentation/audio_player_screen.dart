@@ -138,11 +138,20 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     final current = audioState.currentIndex + 1;
 
     final position = audioState.currentPosition;
-    final duration = audioState.duration ?? Duration.zero;
-    final progress = duration.inMilliseconds > 0
-        ? position.inMilliseconds / duration.inMilliseconds
+    final rawDuration = audioState.duration;
+    final fallbackDurationSeconds = currentSection == null
+        ? 0
+        : (currentSection.durationSeconds > 0
+              ? currentSection.durationSeconds
+              : (currentSection.estimatedReadMinutes * 60));
+    final uiDuration = (rawDuration != null && rawDuration > Duration.zero)
+        ? rawDuration
+        : (fallbackDurationSeconds > 0
+              ? Duration(seconds: fallbackDurationSeconds)
+              : Duration.zero);
+    final progress = uiDuration.inMilliseconds > 0
+        ? position.inMilliseconds / uiDuration.inMilliseconds
         : 0.0;
-    final remaining = duration - position;
 
     return Scaffold(
       appBar: AppBar(
@@ -248,7 +257,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                             ? _formatDuration(
                                 Duration(
                                   milliseconds:
-                                      (_seekValue * duration.inMilliseconds)
+                                      (_seekValue * uiDuration.inMilliseconds)
                                           .round(),
                                 ),
                               )
@@ -260,36 +269,34 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                           value: _isSeeking
                               ? _seekValue
                               : progress.clamp(0.0, 1.0),
+                          onChanged: uiDuration.inMilliseconds <= 0
+                              ? null
+                              : (val) {
+                                  setState(() => _seekValue = val);
+                                },
                           onChangeStart: (val) {
                             setState(() {
                               _isSeeking = true;
                               _seekValue = val;
                             });
                           },
-                          onChanged: (val) {
-                            setState(() => _seekValue = val);
-                          },
-                          onChangeEnd: (val) {
-                            final newPos = Duration(
-                              milliseconds: (val * duration.inMilliseconds)
-                                  .round(),
-                            );
-                            controller.seek(newPos);
-                            setState(() => _isSeeking = false);
-                          },
+                          onChangeEnd: uiDuration.inMilliseconds <= 0
+                              ? null
+                              : (val) {
+                                  final newPos = Duration(
+                                    milliseconds:
+                                        (val * uiDuration.inMilliseconds)
+                                            .round(),
+                                  );
+                                  controller.seek(newPos);
+                                  setState(() => _isSeeking = false);
+                                },
                         ),
                       ),
-                      Text(() {
-                        final displayPos = _isSeeking
-                            ? Duration(
-                                milliseconds:
-                                    (_seekValue * duration.inMilliseconds)
-                                        .round(),
-                              )
-                            : position;
-                        final rem = duration - displayPos;
-                        return '-${_formatDuration(rem.isNegative ? Duration.zero : rem)}';
-                      }(), style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        _formatDuration(uiDuration),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
                 ),
@@ -344,7 +351,9 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                         onTap: () {
                           final newPos = position + const Duration(seconds: 30);
                           controller.seek(
-                            newPos > duration ? duration : newPos,
+                            uiDuration == Duration.zero
+                                ? newPos
+                                : (newPos > uiDuration ? uiDuration : newPos),
                           );
                         },
                       ),
