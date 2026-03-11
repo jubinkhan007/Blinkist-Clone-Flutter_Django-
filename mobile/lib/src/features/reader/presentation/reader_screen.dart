@@ -187,6 +187,59 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   itemCount: book.sections.length,
                   itemBuilder: (context, index) {
                     final section = book.sections[index];
+                    final isContentLocked = section.content == null;
+
+                    if (isContentLocked) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lock_outline,
+                                size: 64,
+                                color: textColor.withOpacity(0.4),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                section.title,
+                                style: TextStyle(
+                                  fontSize: readerOptions.fontSize * 1.3,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'This content is available for premium users only.',
+                                style: TextStyle(
+                                  fontSize: readerOptions.fontSize,
+                                  color: textColor.withOpacity(0.6),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: () => context.push(
+                                  Uri(
+                                    path: '/paywall',
+                                    queryParameters: {
+                                      'slug': book.slug,
+                                      'title': book.title,
+                                    },
+                                  ).toString(),
+                                ),
+                                icon: const Icon(Icons.star),
+                                label: const Text('Upgrade to Premium'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
                     return SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24.0,
@@ -205,9 +258,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          // Future iteration: use flutter_html or flutter_markdown to parse rich text
                           Text(
-                            section.content ?? 'Content not downloaded.',
+                            section.content!,
                             style: TextStyle(
                               fontSize: readerOptions.fontSize,
                               height: 1.6,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../../../core/networking/api_client.dart';
@@ -50,18 +51,47 @@ class FullBookScreen extends ConsumerWidget {
         _log('No full-book asset available for slug=${book.slug}');
         return Scaffold(
           appBar: AppBar(title: Text(book.title)),
-          body: const Center(
+          body: Center(
             child: Padding(
-              padding: EdgeInsets.all(32),
+              padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.book_outlined, size: 64),
-                  SizedBox(height: 16),
-                  Text(
-                    'Full book not available yet.',
-                    textAlign: TextAlign.center,
+                  Icon(
+                    book.isPremium ? Icons.lock_outline : Icons.book_outlined,
+                    size: 64,
                   ),
+                  const SizedBox(height: 16),
+                  Text(
+                    book.isPremium
+                        ? 'Full book is locked'
+                        : 'Full book not available yet.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (book.isPremium) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Upgrade to Premium to read the full book.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: () {
+                        final uri = Uri(
+                          path: '/paywall',
+                          queryParameters: {
+                            'slug': book.slug,
+                            'title': book.title,
+                          },
+                        ).toString();
+                        Navigator.of(context).pop();
+                        GoRouter.of(context).push(uri);
+                      },
+                      icon: const Icon(Icons.star),
+                      label: const Text('Upgrade to Premium'),
+                    ),
+                  ],
                 ],
               ),
             ),
