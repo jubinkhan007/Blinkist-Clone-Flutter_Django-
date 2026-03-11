@@ -43,10 +43,11 @@ class BookAdmin(admin.ModelAdmin):
             'fields': ('description', 'what_you_will_learn',
                        'estimated_read_time_minutes')
         }),
-        ('Full Book Text', {
-            'fields': ('full_text',),
+        ('Full Book', {
+            'fields': ('full_book_pdf', 'full_text'),
             'classes': ('collapse',),
-            'description': 'Paste the complete book text here for the Full Book reader.',
+            'description': 'Upload a PDF for the best reading experience. '
+                           'Paste plain text as a fallback if no PDF is available.',
         }),
     )
 

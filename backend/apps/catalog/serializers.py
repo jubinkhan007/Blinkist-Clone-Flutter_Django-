@@ -83,12 +83,26 @@ class SummarySectionDetailSerializer(SummarySectionListSerializer):
 class BookDetailSerializer(BookListSerializer):
     sections = SummarySectionDetailSerializer(many=True, read_only=True)
     full_text = serializers.SerializerMethodField()
-    
+    full_book_pdf_url = serializers.SerializerMethodField()
+
     class Meta(BookListSerializer.Meta):
-        fields = BookListSerializer.Meta.fields + ('description', 'what_you_will_learn', 'full_text', 'sections')
+        fields = BookListSerializer.Meta.fields + (
+            'description', 'what_you_will_learn',
+            'full_text', 'full_book_pdf_url', 'sections',
+        )
 
     def get_full_text(self, obj):
         request = self.context.get('request')
         if obj.is_premium and not _user_has_premium_access(request):
             return None
         return obj.full_text
+
+    def get_full_book_pdf_url(self, obj):
+        request = self.context.get('request')
+        if obj.is_premium and not _user_has_premium_access(request):
+            return None
+        if obj.full_book_pdf:
+            if request:
+                return request.build_absolute_uri(obj.full_book_pdf.url)
+            return obj.full_book_pdf.url
+        return None

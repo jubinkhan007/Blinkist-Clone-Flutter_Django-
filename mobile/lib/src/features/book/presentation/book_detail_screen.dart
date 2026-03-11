@@ -66,7 +66,7 @@ class _CtaRow extends StatelessWidget {
         TextButton.icon(
           icon: const Icon(Icons.book_outlined),
           label: const Text('Read Full Book'),
-          onPressed: book.fullText.isNotEmpty
+          onPressed: (book.fullBookPdfUrl != null || book.fullText.isNotEmpty)
               ? () => context.push('/books/${book.slug}/full')
               : null,
         ),

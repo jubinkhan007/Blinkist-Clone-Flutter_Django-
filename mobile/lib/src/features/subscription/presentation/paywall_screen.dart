@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ class PaywallScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Go Premium')),
       body: subAsync.when(
         data: (sub) {
+          final isSignedOut = sub == null;
           final trialDays = sub?.trialDaysRemaining ?? 0;
           final status = sub?.subscriptionStatus ?? 'signed_out';
           final isPremium = sub?.isPremium ?? false;
@@ -51,68 +53,97 @@ class PaywallScreen extends ConsumerWidget {
                   onPressed: () => Navigator.pop(context),
                   child: const Text('You are Premium'),
                 )
+              else if (isSignedOut)
+                FilledButton.icon(
+                  onPressed: () => context.go('/profile'),
+                  icon: const Icon(Icons.person),
+                  label: const Text('Sign in to Subscribe'),
+                )
               else
                 FilledButton(
                   onPressed: () async {
-                    final repo = ref.read(subscriptionRepositoryProvider);
-                    final initiation = await repo.initiatePayment();
-                    if (!context.mounted) return;
+                    try {
+                      final repo = ref.read(subscriptionRepositoryProvider);
+                      final initiation = await repo.initiatePayment();
+                      if (!context.mounted) return;
 
-                    await showModalBottomSheet<void>(
-                      context: context,
-                      showDragHandle: true,
-                      builder: (_) => Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Payment Link (${initiation.mode})',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            SelectableText(initiation.gatewayUrl),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: initiation.gatewayUrl.isEmpty
-                                      ? null
-                                      : () async {
-                                          await Clipboard.setData(
-                                            ClipboardData(
-                                              text: initiation.gatewayUrl,
-                                            ),
-                                          );
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Link copied'),
-                                            ),
-                                          );
-                                        },
-                                  icon: const Icon(Icons.copy),
-                                  label: const Text('Copy link'),
-                                ),
-                                const SizedBox(width: 12),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Close'),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'After completing payment, return to the app and tap Refresh.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
+                      await showModalBottomSheet<void>(
+                        context: context,
+                        showDragHandle: true,
+                        builder: (_) => Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Payment Link (${initiation.mode})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              SelectableText(initiation.gatewayUrl),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: initiation.gatewayUrl.isEmpty
+                                        ? null
+                                        : () async {
+                                            await Clipboard.setData(
+                                              ClipboardData(
+                                                text: initiation.gatewayUrl,
+                                              ),
+                                            );
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Link copied'),
+                                              ),
+                                            );
+                                          },
+                                    icon: const Icon(Icons.copy),
+                                    label: const Text('Copy link'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('Close'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'After completing payment, return to the app and tap Refresh.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
+                      );
+                    } on DioException catch (e) {
+                      if (!context.mounted) return;
+                      if (e.response?.statusCode == 401) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please sign in to subscribe.'),
+                          ),
+                        );
+                        context.go('/profile');
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Subscribe failed: ${e.message}'),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Subscribe failed: $e')),
+                      );
+                    }
                   },
                   child: const Text('Subscribe'),
                 ),

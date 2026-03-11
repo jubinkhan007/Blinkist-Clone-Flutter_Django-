@@ -31,7 +31,8 @@ class Book(models.Model):
     cover_image = models.ImageField(upload_to='books/covers/', blank=True, null=True)
     description = models.TextField()
     what_you_will_learn = models.TextField(blank=True)
-    full_text = models.TextField(blank=True, help_text="Complete book text for the Full Book reader")
+    full_text = models.TextField(blank=True, help_text="Complete book text for the Full Book reader (fallback if no PDF)")
+    full_book_pdf = models.FileField(upload_to='books/pdf/', blank=True, null=True, help_text="Upload the full book as a PDF")
     
     estimated_read_time_minutes = models.PositiveIntegerField(default=15)
     is_premium = models.BooleanField(default=False)
