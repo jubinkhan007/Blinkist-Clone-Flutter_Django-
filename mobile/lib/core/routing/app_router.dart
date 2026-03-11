@@ -8,6 +8,7 @@ import '../../src/features/reader/presentation/reader_screen.dart';
 import '../../src/features/reader/presentation/audio_player_screen.dart';
 import '../../src/features/reader/presentation/full_book_screen.dart';
 import '../../src/features/profile/presentation/profile_screen.dart';
+import '../../src/features/library/presentation/downloads_screen.dart';
 import '../../src/features/subscription/presentation/paywall_screen.dart';
 
 // Keys for nested navigation
@@ -29,6 +30,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/explore',
             builder: (context, state) => const ExploreScreen(),
+          ),
+          GoRoute(
+            path: '/library',
+            builder: (context, state) => const DownloadsScreen(),
           ),
           GoRoute(
             path: '/profile',
@@ -103,6 +108,11 @@ class AppScaffold extends StatelessWidget {
             label: 'Explore',
           ),
           NavigationDestination(
+            icon: Icon(Icons.library_books_outlined),
+            selectedIcon: Icon(Icons.library_books),
+            label: 'Library',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
@@ -117,8 +127,11 @@ class AppScaffold extends StatelessWidget {
     if (location.startsWith('/explore')) {
       return 1;
     }
-    if (location.startsWith('/profile')) {
+    if (location.startsWith('/library')) {
       return 2;
+    }
+    if (location.startsWith('/profile')) {
+      return 3;
     }
     return 0;
   }
@@ -132,6 +145,9 @@ class AppScaffold extends StatelessWidget {
         context.go('/explore');
         break;
       case 2:
+        context.go('/library');
+        break;
+      case 3:
         context.go('/profile');
         break;
     }

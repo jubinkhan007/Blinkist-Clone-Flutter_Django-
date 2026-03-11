@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/subscription/subscription_repository.dart';
 
 class PaywallScreen extends ConsumerWidget {
@@ -67,61 +67,17 @@ class PaywallScreen extends ConsumerWidget {
                       final initiation = await repo.initiatePayment();
                       if (!context.mounted) return;
 
-                      await showModalBottomSheet<void>(
-                        context: context,
-                        showDragHandle: true,
-                        builder: (_) => Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Payment Link (${initiation.mode})',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 8),
-                              SelectableText(initiation.gatewayUrl),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  FilledButton.icon(
-                                    onPressed: initiation.gatewayUrl.isEmpty
-                                        ? null
-                                        : () async {
-                                            await Clipboard.setData(
-                                              ClipboardData(
-                                                text: initiation.gatewayUrl,
-                                              ),
-                                            );
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Link copied'),
-                                              ),
-                                            );
-                                          },
-                                    icon: const Icon(Icons.copy),
-                                    label: const Text('Copy link'),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('Close'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'After completing payment, return to the app and tap Refresh.',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
+                      final uri = Uri.parse(initiation.gatewayUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                      } else {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not open payment link.'),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     } on DioException catch (e) {
                       if (!context.mounted) return;
                       if (e.response?.statusCode == 401) {

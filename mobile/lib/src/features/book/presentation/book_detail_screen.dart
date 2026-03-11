@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../../../core/subscription/subscription_repository.dart';
+import '../../library/data/offline_downloads_service.dart';
 import '../data/content_repository.dart';
 import '../domain/book_models.dart';
 
@@ -17,9 +18,16 @@ class _CtaRow extends StatelessWidget {
     required this.onUpgrade,
   });
 
+  void _log(String message) {
+    debugPrint('[FullBookCTA] $message');
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasAudio = book.sections.any((s) => s.audioUrl != null);
+    final hasPdf =
+        book.fullBookPdfUrl != null && book.fullBookPdfUrl!.isNotEmpty;
+    final hasFullText = book.fullText.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,9 +73,29 @@ class _CtaRow extends StatelessWidget {
         // Read Full Book (tertiary text link)
         TextButton.icon(
           icon: const Icon(Icons.book_outlined),
-          label: const Text('Read Full Book'),
-          onPressed: (book.fullBookPdfUrl != null || book.fullText.isNotEmpty)
-              ? () => context.push('/books/${book.slug}/full')
+          label: Text(hasPdf ? 'Open Full Book PDF' : 'Read Full Book'),
+          onPressed: (hasPdf || hasFullText)
+              ? () async {
+                  _log(
+                    'Tapped for slug=${book.slug} '
+                    'hasPdf=$hasPdf hasFullText=$hasFullText '
+                    'rawPdfUrl=${book.fullBookPdfUrl} '
+                    'fullTextLength=${book.fullText.length}',
+                  );
+
+                  if (hasPdf) {
+                    final resolvedPdfUrl = resolveServerUrl(
+                      book.fullBookPdfUrl!,
+                    );
+                    _log('Resolved PDF URL=$resolvedPdfUrl');
+                  }
+
+                  if (!context.mounted) return;
+                  _log(
+                    'Navigating to internal full-book route for slug=${book.slug}',
+                  );
+                  context.push('/books/${book.slug}/full');
+                }
               : null,
         ),
       ],
@@ -88,6 +116,8 @@ class BookDetailScreen extends ConsumerWidget {
       data: (sub) => sub?.isPremium ?? false,
       orElse: () => false,
     );
+    final downloads = ref.watch(offlineDownloadsProvider);
+    final downloadTask = downloads[slug];
 
     return Scaffold(
       body: bookDetailAsync.when(
@@ -174,6 +204,41 @@ class BookDetailScreen extends ConsumerWidget {
                         isLocked: isLocked,
                         onUpgrade: () => context.push(paywallUri),
                       ),
+                      if (!isLocked) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            if (downloadTask == null)
+                              TextButton.icon(
+                                onPressed: () {
+                                  ref
+                                      .read(offlineDownloadsProvider.notifier)
+                                      .startDownload(book);
+                                },
+                                icon: const Icon(Icons.download),
+                                label: const Text('Download for offline'),
+                              )
+                            else if (downloadTask.isCompleted)
+                              const Chip(
+                                avatar: Icon(Icons.check_circle, size: 16),
+                                label: Text('Available Offline'),
+                              )
+                            else
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Downloading...'),
+                                    const SizedBox(height: 4),
+                                    LinearProgressIndicator(
+                                      value: downloadTask.progress,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 32),
                       Text(
                         'What\'s it about?',

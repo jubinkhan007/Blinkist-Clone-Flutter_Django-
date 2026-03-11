@@ -35,6 +35,41 @@ class SummarySection {
       audioUrl: json['audio_url'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'slug': slug,
+      'order': order,
+      'title': title,
+      'duration_seconds': durationSeconds,
+      'estimated_read_minutes': estimatedReadMinutes,
+      'content': content,
+      'audio_url': audioUrl,
+    };
+  }
+
+  SummarySection copyWith({
+    int? id,
+    String? slug,
+    int? order,
+    String? title,
+    int? durationSeconds,
+    int? estimatedReadMinutes,
+    String? content,
+    String? audioUrl,
+  }) {
+    return SummarySection(
+      id: id ?? this.id,
+      slug: slug ?? this.slug,
+      order: order ?? this.order,
+      title: title ?? this.title,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      estimatedReadMinutes: estimatedReadMinutes ?? this.estimatedReadMinutes,
+      content: content ?? this.content,
+      audioUrl: audioUrl ?? this.audioUrl,
+    );
+  }
 }
 
 class BookDetail extends Book {
@@ -82,5 +117,59 @@ class BookDetail extends Book {
           .map((s) => SummarySection.fromJson(s))
           .toList(),
     );
+  }
+
+  BookDetail copyWith({
+    int? id,
+    String? title,
+    String? subtitle,
+    String? slug,
+    Author? author,
+    List<Category>? categories,
+    String? coverImageUrl,
+    int? estimatedReadTimeMinutes,
+    bool? isPremium,
+    String? description,
+    String? whatYouWillLearn,
+    String? fullText,
+    String? fullBookPdfUrl,
+    List<SummarySection>? sections,
+  }) {
+    return BookDetail(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      subtitle: subtitle ?? this.subtitle,
+      slug: slug ?? this.slug,
+      author: author ?? this.author,
+      categories: categories ?? this.categories,
+      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      estimatedReadTimeMinutes:
+          estimatedReadTimeMinutes ?? this.estimatedReadTimeMinutes,
+      isPremium: isPremium ?? this.isPremium,
+      description: description ?? this.description,
+      whatYouWillLearn: whatYouWillLearn ?? this.whatYouWillLearn,
+      fullText: fullText ?? this.fullText,
+      fullBookPdfUrl: fullBookPdfUrl ?? this.fullBookPdfUrl,
+      sections: sections ?? this.sections,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'subtitle': subtitle,
+      'slug': slug,
+      'author': author.toJson(),
+      'categories': categories.map((e) => e.toJson()).toList(),
+      'cover_image_url': coverImageUrl,
+      'estimated_read_time_minutes': estimatedReadTimeMinutes,
+      'is_premium': isPremium,
+      'description': description,
+      'what_you_will_learn': whatYouWillLearn,
+      'full_text': fullText,
+      'full_book_pdf_url': fullBookPdfUrl,
+      'sections': sections.map((e) => e.toJson()).toList(),
+    };
   }
 }

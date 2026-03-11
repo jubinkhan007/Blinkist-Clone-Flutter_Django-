@@ -19,6 +19,10 @@ class Category {
       description: json['description'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'slug': slug, 'description': description};
+  }
 }
 
 class Author {
@@ -36,6 +40,10 @@ class Author {
       bio: json['bio'],
       avatarUrl: json['avatar_url'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'bio': bio, 'avatar_url': avatarUrl};
   }
 }
 

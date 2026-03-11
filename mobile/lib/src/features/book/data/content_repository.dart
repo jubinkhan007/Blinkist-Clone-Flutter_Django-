@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../home/domain/home_models.dart';
@@ -17,6 +21,20 @@ class ContentRepository {
   }
 
   Future<BookDetail> getBookDetail(String slug) async {
+    // 1. Check local storage first (Offline Mode)
+    final appDir = await getApplicationDocumentsDirectory();
+    final localFile = File('${appDir.path}/downloads/$slug/book.json');
+    if (await localFile.exists()) {
+      try {
+        final content = await localFile.readAsString();
+        final json = jsonDecode(content);
+        return BookDetail.fromJson(json);
+      } catch (_) {
+        // Fallback to network if local read fails
+      }
+    }
+
+    // 2. Fetch from Network
     final response = await _dio.get('/catalog/books/$slug/');
     return BookDetail.fromJson(response.data);
   }

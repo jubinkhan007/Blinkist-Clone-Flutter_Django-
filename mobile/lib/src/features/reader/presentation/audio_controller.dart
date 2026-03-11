@@ -216,9 +216,14 @@ class AudioController extends StateNotifier<AudioState> {
     }
 
     try {
-      final resolvedUrl = resolveServerUrl(url);
-      // setUrl returns Duration? — may be null if the server doesn't send headers
-      final dur = await _player.setUrl(resolvedUrl);
+      Duration? dur;
+      if (url.startsWith('file://')) {
+        final path = url.replaceFirst('file://', '');
+        dur = await _player.setFilePath(path);
+      } else {
+        final resolvedUrl = resolveServerUrl(url);
+        dur = await _player.setUrl(resolvedUrl);
+      }
       // Prefer the precise player duration; fall back to the section metadata
       final effectiveDuration = dur ?? _player.duration ?? sectionDuration;
       state = AudioState(

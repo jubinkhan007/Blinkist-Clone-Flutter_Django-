@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
@@ -10,6 +14,10 @@ class FullBookScreen extends ConsumerWidget {
 
   const FullBookScreen({super.key, required this.slug});
 
+  void _log(String message) {
+    debugPrint('[FullBookScreen] $message');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bookAsync = ref.watch(bookDetailProvider(slug));
@@ -17,18 +25,29 @@ class FullBookScreen extends ConsumerWidget {
     return bookAsync.when(
       data: (book) {
         final pdfUrl = book.fullBookPdfUrl;
+        final hasPdf = pdfUrl != null && pdfUrl.isNotEmpty;
+        final hasText = book.fullText.isNotEmpty;
+        final resolvedPdfUrl = hasPdf ? resolveServerUrl(pdfUrl) : null;
 
-        if (pdfUrl != null && pdfUrl.isNotEmpty) {
-          return _PdfReaderView(
-            title: book.title,
-            pdfUrl: resolveServerUrl(pdfUrl),
-          );
+        _log(
+          'Loaded slug=${book.slug} title=${book.title} '
+          'hasPdf=$hasPdf rawPdfUrl=$pdfUrl resolvedPdfUrl=$resolvedPdfUrl '
+          'hasText=$hasText fullTextLength=${book.fullText.length}',
+        );
+
+        // Prefer the in-app text reader when available.
+        // The PDF viewer remains available as an explicit alternate path.
+        if (hasText) {
+          _log('Routing to text reader for slug=${book.slug}');
+          return _TextReaderView(book: book, ref: ref, pdfUrl: resolvedPdfUrl);
         }
 
-        if (book.fullText.isNotEmpty) {
-          return _TextReaderView(book: book, ref: ref);
+        if (hasPdf) {
+          _log('Routing to PDF reader for slug=${book.slug}');
+          return _PdfReaderView(title: book.title, pdfUrl: resolvedPdfUrl!);
         }
 
+        _log('No full-book asset available for slug=${book.slug}');
         return Scaffold(
           appBar: AppBar(title: Text(book.title)),
           body: const Center(
@@ -49,9 +68,8 @@ class FullBookScreen extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
     );
   }
@@ -59,21 +77,33 @@ class FullBookScreen extends ConsumerWidget {
 
 // ── PDF reader ────────────────────────────────────────────────────────────────
 
-class _PdfReaderView extends StatefulWidget {
+class _PdfReaderView extends ConsumerStatefulWidget {
   final String title;
   final String pdfUrl;
 
   const _PdfReaderView({required this.title, required this.pdfUrl});
 
   @override
-  State<_PdfReaderView> createState() => _PdfReaderViewState();
+  ConsumerState<_PdfReaderView> createState() => _PdfReaderViewState();
 }
 
-class _PdfReaderViewState extends State<_PdfReaderView> {
+class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
   final PdfViewerController _controller = PdfViewerController();
   int _currentPage = 1;
   int _totalPages = 0;
   bool _showToolbar = true;
+  File? _pdfFile;
+  String? _error;
+
+  void _log(String message) {
+    debugPrint('[PdfReaderView] $message');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _downloadPdfToLocalFile();
+  }
 
   @override
   void dispose() {
@@ -83,67 +113,54 @@ class _PdfReaderViewState extends State<_PdfReaderView> {
 
   @override
   Widget build(BuildContext context) {
+    _log(
+      'build title=${widget.title} url=${widget.pdfUrl} '
+      'currentPage=$_currentPage totalPages=$_totalPages '
+      'localFile=${_pdfFile?.path} error=$_error',
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFF424242),
+      backgroundColor: Colors.white,
       appBar: _showToolbar
           ? AppBar(
-              backgroundColor: Colors.black87,
-              iconTheme: const IconThemeData(color: Colors.white),
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.title,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (_totalPages > 0)
                     Text(
                       'Page $_currentPage of $_totalPages',
                       style: const TextStyle(
-                          color: Colors.white70, fontSize: 12),
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
                     ),
                 ],
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.zoom_in, color: Colors.white),
+                  icon: const Icon(Icons.zoom_in),
                   onPressed: () => _controller.zoomLevel =
                       (_controller.zoomLevel + 0.25).clamp(0.75, 3.0),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.zoom_out, color: Colors.white),
+                  icon: const Icon(Icons.zoom_out),
                   onPressed: () => _controller.zoomLevel =
                       (_controller.zoomLevel - 0.25).clamp(0.75, 3.0),
                 ),
               ],
             )
           : null,
-      body: GestureDetector(
-        onTap: () => setState(() => _showToolbar = !_showToolbar),
-        child: SfPdfViewer.network(
-          widget.pdfUrl,
-          controller: _controller,
-          pageLayoutMode: PdfPageLayoutMode.continuous,
-          scrollDirection: PdfScrollDirection.vertical,
-          canShowScrollHead: true,
-          canShowScrollStatus: true,
-          onPageChanged: (PdfPageChangedDetails details) {
-            setState(() => _currentPage = details.newPageNumber);
-          },
-          onDocumentLoaded: (PdfDocumentLoadedDetails details) {
-            setState(() => _totalPages = details.document.pages.count);
-          },
-          onDocumentLoadFailed: (PdfDocumentLoadFailedDetails details) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to load PDF: ${details.error}')),
-            );
-          },
-        ),
-      ),
+      body: _buildBody(),
       bottomNavigationBar: _showToolbar && _totalPages > 0
           ? _PageJumpBar(
               controller: _controller,
@@ -152,6 +169,152 @@ class _PdfReaderViewState extends State<_PdfReaderView> {
             )
           : null,
     );
+  }
+
+  Widget _buildBody() {
+    if (_error != null) {
+      _log('Rendering error UI: $_error');
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.black45, size: 48),
+              const SizedBox(height: 16),
+              const Text('Failed to load PDF inside the app'),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _error = null;
+                    _pdfFile = null;
+                  });
+                  _downloadPdfToLocalFile();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_pdfFile == null) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Preparing secure PDF...'),
+          ],
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => setState(() => _showToolbar = !_showToolbar),
+      child: Container(
+        color: const Color(0xFFF4F1EA),
+        child: SfPdfViewer.file(
+          _pdfFile!,
+          controller: _controller,
+          pageLayoutMode: PdfPageLayoutMode.continuous,
+          scrollDirection: PdfScrollDirection.vertical,
+          canShowScrollHead: true,
+          canShowScrollStatus: true,
+          onPageChanged: (details) {
+            _log(
+              'onPageChanged old=${details.oldPageNumber} '
+              'new=${details.newPageNumber}',
+            );
+            setState(() => _currentPage = details.newPageNumber);
+          },
+          onDocumentLoaded: (details) {
+            _log(
+              'onDocumentLoaded pages=${details.document.pages.count} '
+              'file=${_pdfFile?.path} url=${widget.pdfUrl}',
+            );
+            setState(() => _totalPages = details.document.pages.count);
+          },
+          onDocumentLoadFailed: (details) {
+            _log(
+              'onDocumentLoadFailed description=${details.description} '
+              'error=${details.error}',
+            );
+            setState(() => _error = 'Failed to render PDF: ${details.error}');
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadPdfToLocalFile() async {
+    _log('Downloading PDF into local app storage from ${widget.pdfUrl}');
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'full_book_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final localFile = File('${tempDir.path}/$fileName');
+
+      // Use a plain Dio (no baseUrl) since widget.pdfUrl is already an
+      // absolute URL like http://localhost:8001/media/books/pdf/foo.pdf.
+      // The app-level dioProvider prepends its baseUrl which corrupts the URL.
+      final storage = ref.read(secureStorageProvider);
+      final token = await storage.read(key: 'access_token');
+      final plainDio = Dio();
+
+      await plainDio.download(
+        widget.pdfUrl,
+        localFile.path,
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          receiveTimeout: const Duration(seconds: 60),
+          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+        ),
+      );
+
+      final exists = await localFile.exists();
+      final size = exists ? await localFile.length() : 0;
+      _log(
+        'Local PDF download complete path=${localFile.path} '
+        'exists=$exists size=$size',
+      );
+
+      if (!exists || size < 100) {
+        if (!mounted) return;
+        setState(() {
+          _error =
+              'Downloaded file is empty or invalid (${size}B). '
+              'Please check if the PDF was uploaded for this book.';
+        });
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _error = null;
+        _pdfFile = localFile;
+      });
+    } on DioException catch (e) {
+      _log(
+        'Local PDF download failed '
+        'status=${e.response?.statusCode} message=${e.message}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _error = 'Download failed: ${e.response?.statusCode ?? e.message}';
+      });
+    } catch (e) {
+      _log('Local PDF download threw $e');
+      if (!mounted) return;
+      setState(() {
+        _error = 'Download failed: $e';
+      });
+    }
   }
 }
 
@@ -169,14 +332,14 @@ class _PageJumpBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black87,
+      color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SafeArea(
         top: false,
         child: Row(
           children: [
             IconButton(
-              icon: const Icon(Icons.chevron_left, color: Colors.white),
+              icon: const Icon(Icons.chevron_left, color: Colors.black87),
               onPressed: currentPage > 1
                   ? () => controller.previousPage()
                   : null,
@@ -187,12 +350,12 @@ class _PageJumpBar extends StatelessWidget {
                 min: 1,
                 max: totalPages.toDouble(),
                 onChanged: (val) => controller.jumpToPage(val.round()),
-                activeColor: Colors.white,
-                inactiveColor: Colors.white30,
+                activeColor: Colors.black87,
+                inactiveColor: Colors.black26,
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.chevron_right, color: Colors.white),
+              icon: const Icon(Icons.chevron_right, color: Colors.black87),
               onPressed: currentPage < totalPages
                   ? () => controller.nextPage()
                   : null,
@@ -209,12 +372,21 @@ class _PageJumpBar extends StatelessWidget {
 class _TextReaderView extends ConsumerWidget {
   final dynamic book;
   final WidgetRef ref;
+  final String? pdfUrl;
 
-  const _TextReaderView({required this.book, required this.ref});
+  const _TextReaderView({required this.book, required this.ref, this.pdfUrl});
+
+  void _log(String message) {
+    debugPrint('[FullBookTextReader] $message');
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef r) {
     final readerOptions = r.watch(readerOptionsProvider);
+    _log(
+      'build title=${book.title} pdfUrl=$pdfUrl '
+      'fullTextLength=${book.fullText.length}',
+    );
 
     Color bg = Theme.of(context).colorScheme.surface;
     Color fg = Theme.of(context).colorScheme.onSurface;
@@ -232,10 +404,26 @@ class _TextReaderView extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: fg),
-        title: Text(book.title,
-            style: TextStyle(color: fg, fontSize: 16),
-            overflow: TextOverflow.ellipsis),
+        title: Text(
+          book.title,
+          style: TextStyle(color: fg, fontSize: 16),
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
+          if (pdfUrl != null)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'Open PDF',
+              onPressed: () {
+                _log('Opening in-app PDF viewer for $pdfUrl');
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        _PdfReaderView(title: book.title, pdfUrl: pdfUrl!),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.text_fields),
             onPressed: () => _showTypographyModal(context, r),
