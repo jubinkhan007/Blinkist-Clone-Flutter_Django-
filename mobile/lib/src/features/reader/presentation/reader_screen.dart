@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../book/data/content_repository.dart';
 import '../../progress/data/progress_repository.dart';
+import '../domain/highlight_models.dart';
+import '../data/highlight_repository.dart';
 import 'audio_controller.dart';
+import 'quote_card_dialog.dart';
 import 'reader_options_provider.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -61,6 +64,260 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     } catch (error) {
       debugPrint('Could not restore reading progress: $error');
     }
+  }
+
+  Color _getHighlightColor(String colorName) {
+    switch (colorName.toLowerCase()) {
+      case 'green':
+        return const Color(0xFF81C784).withOpacity(0.35);
+      case 'blue':
+        return const Color(0xFF64B5F6).withOpacity(0.35);
+      case 'pink':
+        return const Color(0xFFF06292).withOpacity(0.35);
+      case 'yellow':
+      default:
+        return const Color(0xFFFFD54F).withOpacity(0.40);
+    }
+  }
+
+  void _showHighlightModal(
+    BuildContext context, {
+    required dynamic book,
+    required dynamic section,
+    required String selectedText,
+  }) {
+    String selectedColor = 'yellow';
+    final noteController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Highlight Passage',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border(
+                    left: BorderSide(
+                      color: _getHighlightColor(selectedColor).withOpacity(1.0),
+                      width: 4,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  selectedText.trim(),
+                  style:
+                      const TextStyle(fontStyle: FontStyle.italic, fontSize: 13),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Highlight Color',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _colorOption('yellow', const Color(0xFFFFD54F), selectedColor,
+                      (c) => setModalState(() => selectedColor = c)),
+                  const SizedBox(width: 12),
+                  _colorOption('green', const Color(0xFF81C784), selectedColor,
+                      (c) => setModalState(() => selectedColor = c)),
+                  const SizedBox(width: 12),
+                  _colorOption('blue', const Color(0xFF64B5F6), selectedColor,
+                      (c) => setModalState(() => selectedColor = c)),
+                  const SizedBox(width: 12),
+                  _colorOption('pink', const Color(0xFFF06292), selectedColor,
+                      (c) => setModalState(() => selectedColor = c)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                decoration: InputDecoration(
+                  hintText: 'Add an optional note or thought...',
+                  hintStyle: const TextStyle(fontSize: 13),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.bookmark_add_rounded, size: 18),
+                  label: const Text('Save Highlight'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      await ref
+                          .read(highlightRepositoryProvider)
+                          .createHighlight(
+                            bookSlug: book.slug,
+                            sectionId: section.id,
+                            selectedText: selectedText.trim(),
+                            note: noteController.text.trim(),
+                            color: selectedColor,
+                          );
+                      ref.invalidate(bookHighlightsProvider(book.slug));
+                      ref.invalidate(userHighlightsProvider);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Highlight saved to My Notebook!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not save highlight: $e')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _colorOption(
+    String name,
+    Color color,
+    String current,
+    ValueChanged<String> onSelect,
+  ) {
+    final isSelected = name == current;
+    return GestureDetector(
+      onTap: () => onSelect(name),
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border:
+              isSelected ? Border.all(color: Colors.black87, width: 2.5) : null,
+        ),
+        child: isSelected
+            ? const Icon(Icons.check, size: 18, color: Colors.black87)
+            : null,
+      ),
+    );
+  }
+
+  TextSpan _buildHighlightedTextSpan({
+    required String fullText,
+    required List<UserHighlight> sectionHighlights,
+    required TextStyle baseStyle,
+  }) {
+    if (sectionHighlights.isEmpty) {
+      return TextSpan(text: fullText, style: baseStyle);
+    }
+
+    final List<Map<String, dynamic>> occurrences = [];
+    for (final h in sectionHighlights) {
+      final query = h.selectedText.trim();
+      if (query.isEmpty) continue;
+      int start = 0;
+      while ((start = fullText.indexOf(query, start)) != -1) {
+        occurrences.add({
+          'start': start,
+          'end': start + query.length,
+          'highlight': h,
+        });
+        start += query.length;
+      }
+    }
+
+    if (occurrences.isEmpty) {
+      return TextSpan(text: fullText, style: baseStyle);
+    }
+
+    occurrences.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+
+    final List<TextSpan> spans = [];
+    int currentIndex = 0;
+
+    for (final occ in occurrences) {
+      final start = occ['start'] as int;
+      final end = occ['end'] as int;
+      final h = occ['highlight'] as UserHighlight;
+
+      if (start < currentIndex) {
+        continue;
+      }
+
+      if (start > currentIndex) {
+        spans.add(TextSpan(
+          text: fullText.substring(currentIndex, start),
+          style: baseStyle,
+        ));
+      }
+
+      spans.add(TextSpan(
+        text: fullText.substring(start, end),
+        style: baseStyle.copyWith(
+          backgroundColor: _getHighlightColor(h.color),
+        ),
+      ));
+
+      currentIndex = end;
+    }
+
+    if (currentIndex < fullText.length) {
+      spans.add(TextSpan(
+        text: fullText.substring(currentIndex),
+        style: baseStyle,
+      ));
+    }
+
+    return TextSpan(children: spans, style: baseStyle);
   }
 
   void _showTypographyModal(BuildContext context, WidgetRef ref) {
@@ -139,6 +396,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final sectionsAsync = ref.watch(summarySectionsProvider(widget.slug));
     final readerOptions = ref.watch(readerOptionsProvider);
     final audioController = ref.read(audioControllerProvider.notifier);
+    final highlightsAsync = ref.watch(bookHighlightsProvider(widget.slug));
+    final highlights = highlightsAsync.valueOrNull ?? [];
 
     // Apply basic thematic background based on settings
     Color backgroundColor = Theme.of(context).colorScheme.surface;
@@ -300,14 +559,68 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               ),
                             ),
                             const SizedBox(height: 24),
-                            Text(
-                              section.content!,
-                              style: TextStyle(
-                                fontSize: readerOptions.fontSize,
-                                height: 1.6,
-                                color: textColor,
-                                fontFamily: readerOptions.fontFamily,
+                            SelectableText.rich(
+                              _buildHighlightedTextSpan(
+                                fullText: section.content!,
+                                sectionHighlights: highlights
+                                    .where((h) =>
+                                        h.sectionId == section.id ||
+                                        section.content!
+                                            .contains(h.selectedText.trim()))
+                                    .toList(),
+                                baseStyle: TextStyle(
+                                  fontSize: readerOptions.fontSize,
+                                  height: 1.6,
+                                  color: textColor,
+                                  fontFamily: readerOptions.fontFamily,
+                                ),
                               ),
+                              contextMenuBuilder: (context, editableTextState) {
+                                final textEditingValue =
+                                    editableTextState.textEditingValue;
+                                final selectedText = textEditingValue.selection
+                                    .textInside(textEditingValue.text);
+                                final buttonItems =
+                                    editableTextState.contextMenuButtonItems;
+
+                                if (selectedText.trim().isNotEmpty) {
+                                  buttonItems.insert(
+                                    0,
+                                    ContextMenuButtonItem(
+                                      label: 'Highlight ✍️',
+                                      onPressed: () {
+                                        editableTextState.hideToolbar();
+                                        _showHighlightModal(
+                                          context,
+                                          book: book,
+                                          section: section,
+                                          selectedText: selectedText,
+                                        );
+                                      },
+                                    ),
+                                  );
+                                  buttonItems.insert(
+                                    1,
+                                    ContextMenuButtonItem(
+                                      label: 'Quote Card 🎨',
+                                      onPressed: () {
+                                        editableTextState.hideToolbar();
+                                        QuoteCardDialog.show(
+                                          context,
+                                          quoteText: selectedText,
+                                          bookTitle: book.title,
+                                          bookAuthor: book.author,
+                                        );
+                                      },
+                                    ),
+                                  );
+                                }
+
+                                return AdaptiveTextSelectionToolbar.buttonItems(
+                                  anchors: editableTextState.contextMenuAnchors,
+                                  buttonItems: buttonItems,
+                                );
+                              },
                             ),
                             const SizedBox(height: 48),
                           ],

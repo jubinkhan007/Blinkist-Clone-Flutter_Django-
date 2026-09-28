@@ -27,4 +27,5 @@ urlpatterns = [
     path('api/v1/progress/', include('apps.progress.urls')),
     path('api/v1/payments/', include('apps.subscriptions.urls')),
     path('api/v1/summaries/', include('apps.summaries.urls')),
+    path('api/v1/highlights/', include('apps.summaries.highlight_urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
