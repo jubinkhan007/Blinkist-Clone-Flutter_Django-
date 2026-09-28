@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../src/features/reader/presentation/reader_options_provider.dart';
 
 String get kApiBaseUrl {
   if (kIsWeb) return 'http://localhost:8001/api/v1';
@@ -29,6 +30,39 @@ final secureStorageProvider = Provider((ref) => const FlutterSecureStorage());
 /// AuthNotifier listens to this and logs the user out reactively.
 final forceLogoutProvider = StateProvider<int>((ref) => 0);
 
+Future<String?> _readToken(Ref ref, String key) async {
+  final storage = ref.read(secureStorageProvider);
+  final secureValue = await storage.read(key: key);
+  if (secureValue != null && secureValue.isNotEmpty) {
+    return secureValue;
+  }
+
+  final prefs = ref.read(sharedPreferencesProvider);
+  final prefsValue = prefs.getString(key);
+  if (prefsValue != null && prefsValue.isNotEmpty) {
+    await storage.write(key: key, value: prefsValue);
+    return prefsValue;
+  }
+
+  return null;
+}
+
+Future<void> _writeToken(Ref ref, String key, String value) async {
+  final storage = ref.read(secureStorageProvider);
+  final prefs = ref.read(sharedPreferencesProvider);
+  await storage.write(key: key, value: value);
+  await prefs.setString(key, value);
+}
+
+Future<void> _clearTokens(Ref ref) async {
+  final storage = ref.read(secureStorageProvider);
+  final prefs = ref.read(sharedPreferencesProvider);
+  await storage.delete(key: 'access_token');
+  await storage.delete(key: 'refresh_token');
+  await prefs.remove('access_token');
+  await prefs.remove('refresh_token');
+}
+
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
@@ -43,7 +77,7 @@ final dioProvider = Provider<Dio>((ref) {
 });
 
 class AuthInterceptor extends Interceptor {
-  final ProviderRef ref;
+  final Ref ref;
   bool _isRefreshing = false;
 
   AuthInterceptor(this.ref);
@@ -53,8 +87,7 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final storage = ref.read(secureStorageProvider);
-    final token = await storage.read(key: 'access_token');
+    final token = await _readToken(ref, 'access_token');
 
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -67,8 +100,7 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401 && !_isRefreshing) {
       _isRefreshing = true;
-      final storage = ref.read(secureStorageProvider);
-      final refreshToken = await storage.read(key: 'refresh_token');
+      final refreshToken = await _readToken(ref, 'refresh_token');
 
       if (refreshToken != null) {
         try {
@@ -81,14 +113,15 @@ class AuthInterceptor extends Interceptor {
           final newAccess = response.data['access'] as String?;
 
           if (newAccess != null) {
-            await storage.write(key: 'access_token', value: newAccess);
+            await _writeToken(ref, 'access_token', newAccess);
             _isRefreshing = false;
 
             // Retry the original request with the new token
             final retryOptions = err.requestOptions;
             retryOptions.headers['Authorization'] = 'Bearer $newAccess';
-            final retryResponse =
-                await ref.read(dioProvider).fetch(retryOptions);
+            final retryResponse = await ref
+                .read(dioProvider)
+                .fetch(retryOptions);
             return handler.resolve(retryResponse);
           }
         } catch (e) {
@@ -96,12 +129,12 @@ class AuthInterceptor extends Interceptor {
           // Only force logout when the server explicitly rejects the refresh
           // token (401). For network errors, connectivity loss, etc., keep the
           // tokens intact so the user stays logged in when connectivity returns.
-          final isAuthFailure = e is DioException &&
+          final isAuthFailure =
+              e is DioException &&
               e.response?.statusCode != null &&
               e.response!.statusCode! == 401;
           if (isAuthFailure) {
-            await storage.delete(key: 'access_token');
-            await storage.delete(key: 'refresh_token');
+            await _clearTokens(ref);
             ref.read(forceLogoutProvider.notifier).state++;
           }
           return handler.next(err);
@@ -110,8 +143,7 @@ class AuthInterceptor extends Interceptor {
 
       // No refresh token stored — treat as unauthenticated.
       _isRefreshing = false;
-      await storage.delete(key: 'access_token');
-      await storage.delete(key: 'refresh_token');
+      await _clearTokens(ref);
       ref.read(forceLogoutProvider.notifier).state++;
     }
 

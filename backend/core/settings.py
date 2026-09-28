@@ -153,6 +153,39 @@ AUTH_USER_MODEL = 'accounts.User'
 # Celery Configuration
 CELERY_BROKER_URL = env('REDIS_URL', default='redis://localhost:6379/1')
 
+# AI Pipeline Settings
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL_NAME = env('GEMINI_MODEL_NAME', default='gemini-2.5-flash')
+GEMINI_REQUEST_TIMEOUT_SECONDS = env.int('GEMINI_REQUEST_TIMEOUT_SECONDS', default=45)
+PINECONE_API_KEY = env('PINECONE_API_KEY', default='')
+PINECONE_ENVIRONMENT = env('PINECONE_ENVIRONMENT', default='')
+PINECONE_INDEX_NAME = env('PINECONE_INDEX_NAME', default='blinkist-clone')
+
+# AWS S3 Configuration (Optional - for Phase 2/3)
+AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY', default='')
+AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME', default='')
+AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='us-east-1')
+
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
+
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Subscription / SSLCOMMERZ
+SUBSCRIPTION_PRICE_BDT = env.float('SUBSCRIPTION_PRICE_BDT', default=149.0)
+SSLCOMMERZ_STORE_ID = env('SSLCOMMERZ_STORE_ID', default='')
+SSLCOMMERZ_STORE_PASSWORD = env('SSLCOMMERZ_STORE_PASSWORD', default='')
+SSLCOMMERZ_SANDBOX = env.bool('SSLCOMMERZ_SANDBOX', default=True)
+MOBILE_APP_RETURN_URL = env(
+    'MOBILE_APP_RETURN_URL',
+    default='blinkist:/payment-return',
+)
+CANCEL_AT_PERIOD_END = env.bool('CANCEL_AT_PERIOD_END', default=True)
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -19,30 +19,36 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final bookAsync = ref.watch(bookDetailProvider(widget.slug));
+    final sectionsAsync = ref.watch(summarySectionsProvider(widget.slug));
     final audioState = ref.watch(audioControllerProvider);
 
     return bookAsync.when(
-      data: (book) {
-        // Load sections once
-        if (!_initialized) {
-          _initialized = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final controller = ref.read(audioControllerProvider.notifier);
-            final isAlreadyLoaded =
-                audioState.bookSlug == book.slug &&
-                audioState.totalSections == book.sections.length;
-            if (!isAlreadyLoaded) {
-              controller.loadBook(
-                bookId: book.id,
-                bookSlug: book.slug,
-                bookTitle: book.title,
-                sections: book.sections,
-              );
-            }
-          });
-        }
-        return _PlayerView(book: book);
-      },
+      data: (book) => sectionsAsync.when(
+        data: (sections) {
+          // Load sections once
+          if (!_initialized) {
+            _initialized = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final controller = ref.read(audioControllerProvider.notifier);
+              final isAlreadyLoaded =
+                  audioState.bookSlug == book.slug &&
+                  audioState.totalSections == sections.length;
+              if (!isAlreadyLoaded) {
+                controller.loadBook(
+                  bookId: book.id,
+                  bookSlug: book.slug,
+                  bookTitle: book.title,
+                  sections: sections,
+                );
+              }
+            });
+          }
+          return _PlayerView(book: book, sections: sections);
+        },
+        loading: () =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
+      ),
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
@@ -52,8 +58,9 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
 
 class _PlayerView extends ConsumerStatefulWidget {
   final BookDetail book;
+  final List<SummarySection> sections;
 
-  const _PlayerView({required this.book});
+  const _PlayerView({required this.book, required this.sections});
 
   @override
   ConsumerState<_PlayerView> createState() => _PlayerViewState();
@@ -61,6 +68,7 @@ class _PlayerView extends ConsumerStatefulWidget {
 
 class _PlayerViewState extends ConsumerState<_PlayerView> {
   BookDetail get book => widget.book;
+  List<SummarySection> get sections => widget.sections;
 
   // Dragging state — while scrubbing, freeze the displayed position
   bool _isSeeking = false;
@@ -86,9 +94,9 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: book.sections.length,
+              itemCount: sections.length,
               itemBuilder: (_, i) {
-                final section = book.sections[i];
+                final section = sections[i];
                 final isCurrent = i == audioState.currentIndex;
                 final duration = section.durationSeconds > 0
                     ? '${(section.durationSeconds / 60).ceil()} min'
@@ -131,10 +139,10 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     final audioState = ref.watch(audioControllerProvider);
     final controller = ref.read(audioControllerProvider.notifier);
     final isThisBook = audioState.bookSlug == book.slug;
-    final currentSection = audioState.currentIndex < book.sections.length
-        ? (isThisBook ? book.sections[audioState.currentIndex] : null)
+    final currentSection = audioState.currentIndex < sections.length
+        ? (isThisBook ? sections[audioState.currentIndex] : null)
         : null;
-    final total = book.sections.length;
+    final total = sections.length;
     final current = audioState.currentIndex + 1;
 
     final position = audioState.currentPosition;

@@ -1,6 +1,7 @@
-from rest_framework import generics, filters, permissions
+from rest_framework import filters, generics, permissions, views
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from apps.catalog.models import Book, Category
+from apps.catalog.models import Book, Category, UserLibraryItem
 from apps.catalog.serializers import BookListSerializer, BookDetailSerializer, CategorySerializer
 
 class CategoryListView(generics.ListAPIView):
@@ -22,8 +23,51 @@ class BookListView(generics.ListAPIView):
     search_fields = ['title', 'subtitle', 'author__name', 'categories__name']  # Uses PostgreSQL icontains
     ordering_fields = ['created_at', 'title', 'estimated_read_time_minutes']
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
 class BookDetailView(generics.RetrieveAPIView):
     queryset = Book.objects.all()
     serializer_class = BookDetailSerializer
     lookup_field = 'slug'
     permission_classes = (permissions.AllowAny,)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+
+class UserLibraryListView(generics.ListAPIView):
+    serializer_class = BookListSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
+
+    def get_queryset(self):
+        return Book.objects.filter(saved_by__user=self.request.user).prefetch_related(
+            'categories',
+            'author',
+        ).order_by('-saved_by__saved_at')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+
+class UserLibraryToggleView(views.APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, book_slug):
+        book = generics.get_object_or_404(Book, slug=book_slug)
+        library_item, created = UserLibraryItem.objects.get_or_create(
+            user=request.user,
+            book=book,
+        )
+        if created:
+            return Response({'saved': True})
+
+        library_item.delete()
+        return Response({'saved': False})

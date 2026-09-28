@@ -25,6 +25,28 @@ class SubscriptionRepository {
     final response = await _dio.post('/payments/initiate/');
     return PaymentInitiation.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<void> cancelSubscription() async {
+    await _dio.post('/payments/subscription/cancel/');
+  }
+
+  Future<SubscriptionInfo> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String bio,
+    required String avatarUrl,
+  }) async {
+    final response = await _dio.patch(
+      '/me/',
+      data: {
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'bio': bio.trim(),
+        'avatar_url': avatarUrl.trim(),
+      },
+    );
+    return SubscriptionInfo.fromJson(response.data as Map<String, dynamic>);
+  }
 }
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {

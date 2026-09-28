@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import UserBookProgress, UserSectionProgress, UserAudioProgress, UserSummaryProgress
+from .models import UserFullBookProgress
 
 class UserSummaryProgressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -24,3 +25,10 @@ class UserAudioProgressSerializer(serializers.ModelSerializer):
         model = UserAudioProgress
         fields = ('id', 'book', 'current_section', 'current_position_seconds', 'is_finished', 'last_listened_at')
         read_only_fields = ('id', 'last_listened_at')
+
+
+class UserFullBookProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserFullBookProgress
+        fields = ('id', 'book', 'current_page', 'current_offset', 'last_opened_at')
+        read_only_fields = ('id', 'last_opened_at')

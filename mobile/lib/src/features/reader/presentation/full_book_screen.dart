@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
+import '../../progress/data/progress_repository.dart';
 import 'reader_options_provider.dart';
 
 class FullBookScreen extends ConsumerWidget {
@@ -45,7 +46,11 @@ class FullBookScreen extends ConsumerWidget {
 
         if (hasPdf) {
           _log('Routing to PDF reader for slug=${book.slug}');
-          return _PdfReaderView(title: book.title, pdfUrl: resolvedPdfUrl!);
+          return _PdfReaderView(
+            bookId: book.id,
+            title: book.title,
+            pdfUrl: resolvedPdfUrl!,
+          );
         }
 
         _log('No full-book asset available for slug=${book.slug}');
@@ -108,10 +113,15 @@ class FullBookScreen extends ConsumerWidget {
 // ── PDF reader ────────────────────────────────────────────────────────────────
 
 class _PdfReaderView extends ConsumerStatefulWidget {
+  final int bookId;
   final String title;
   final String pdfUrl;
 
-  const _PdfReaderView({required this.title, required this.pdfUrl});
+  const _PdfReaderView({
+    required this.bookId,
+    required this.title,
+    required this.pdfUrl,
+  });
 
   @override
   ConsumerState<_PdfReaderView> createState() => _PdfReaderViewState();
@@ -124,6 +134,7 @@ class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
   bool _showToolbar = true;
   File? _pdfFile;
   String? _error;
+  bool _restoredProgress = false;
 
   void _log(String message) {
     debugPrint('[PdfReaderView] $message');
@@ -137,6 +148,7 @@ class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
 
   @override
   void dispose() {
+    _saveProgress();
     _controller.dispose();
     super.dispose();
   }
@@ -261,6 +273,7 @@ class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
               'new=${details.newPageNumber}',
             );
             setState(() => _currentPage = details.newPageNumber);
+            _saveProgress();
           },
           onDocumentLoaded: (details) {
             _log(
@@ -268,6 +281,7 @@ class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
               'file=${_pdfFile?.path} url=${widget.pdfUrl}',
             );
             setState(() => _totalPages = details.document.pages.count);
+            _restoreProgress();
           },
           onDocumentLoadFailed: (details) {
             _log(
@@ -346,6 +360,44 @@ class _PdfReaderViewState extends ConsumerState<_PdfReaderView> {
       });
     }
   }
+
+  Future<void> _restoreProgress() async {
+    if (_restoredProgress) {
+      return;
+    }
+    _restoredProgress = true;
+
+    try {
+      final progress = await ref
+          .read(progressRepositoryProvider)
+          .getFullBookProgress(widget.bookId);
+      if (progress.currentPage > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          _controller.jumpToPage(progress.currentPage);
+          setState(() => _currentPage = progress.currentPage);
+        });
+      }
+    } catch (error) {
+      _log('Could not restore PDF progress: $error');
+    }
+  }
+
+  Future<void> _saveProgress() async {
+    try {
+      await ref
+          .read(progressRepositoryProvider)
+          .saveFullBookProgress(
+            bookId: widget.bookId,
+            currentPage: _currentPage,
+            currentOffset: 0.0,
+          );
+    } catch (error) {
+      _log('Could not save PDF progress: $error');
+    }
+  }
 }
 
 class _PageJumpBar extends StatelessWidget {
@@ -399,24 +451,107 @@ class _PageJumpBar extends StatelessWidget {
 
 // ── Plain text fallback reader ────────────────────────────────────────────────
 
-class _TextReaderView extends ConsumerWidget {
+class _TextReaderView extends ConsumerStatefulWidget {
   final dynamic book;
   final WidgetRef ref;
   final String? pdfUrl;
 
   const _TextReaderView({required this.book, required this.ref, this.pdfUrl});
 
+  @override
+  ConsumerState<_TextReaderView> createState() => _TextReaderViewState();
+}
+
+class _TextReaderViewState extends ConsumerState<_TextReaderView> {
+  final ScrollController _scrollController = ScrollController();
+  bool _restoredProgress = false;
+
+  dynamic get book => widget.book;
+  String? get pdfUrl => widget.pdfUrl;
+
   void _log(String message) {
     debugPrint('[FullBookTextReader] $message');
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef r) {
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _saveProgress();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    _saveProgress();
+  }
+
+  Future<void> _restoreProgress() async {
+    if (_restoredProgress) {
+      return;
+    }
+    _restoredProgress = true;
+
+    try {
+      final progress = await ref
+          .read(progressRepositoryProvider)
+          .getFullBookProgress(book.id);
+      if (progress.currentOffset <= 0) {
+        return;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) {
+          return;
+        }
+        final maxExtent = _scrollController.position.maxScrollExtent;
+        final target = (maxExtent * progress.currentOffset).clamp(
+          0.0,
+          maxExtent,
+        );
+        _scrollController.jumpTo(target);
+      });
+    } catch (error) {
+      _log('Could not restore text progress: $error');
+    }
+  }
+
+  Future<void> _saveProgress() async {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    try {
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      final ratio = maxExtent <= 0
+          ? 0.0
+          : (_scrollController.offset / maxExtent).clamp(0.0, 1.0);
+      await ref
+          .read(progressRepositoryProvider)
+          .saveFullBookProgress(
+            bookId: book.id,
+            currentPage: 0,
+            currentOffset: ratio,
+          );
+    } catch (error) {
+      _log('Could not save text progress: $error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ref;
     final readerOptions = r.watch(readerOptionsProvider);
     _log(
       'build title=${book.title} pdfUrl=$pdfUrl '
       'fullTextLength=${book.fullText.length}',
     );
+    _restoreProgress();
 
     Color bg = Theme.of(context).colorScheme.surface;
     Color fg = Theme.of(context).colorScheme.onSurface;
@@ -448,8 +583,11 @@ class _TextReaderView extends ConsumerWidget {
                 _log('Opening in-app PDF viewer for $pdfUrl');
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        _PdfReaderView(title: book.title, pdfUrl: pdfUrl!),
+                    builder: (_) => _PdfReaderView(
+                      bookId: book.id,
+                      title: book.title,
+                      pdfUrl: pdfUrl!,
+                    ),
                   ),
                 );
               },
@@ -461,6 +599,7 @@ class _TextReaderView extends ConsumerWidget {
         ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: Text(
           book.fullText,

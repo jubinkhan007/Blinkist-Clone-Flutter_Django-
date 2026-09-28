@@ -1,0 +1,39 @@
+# Virtual environment
+venv/
+backend/venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Uploaded Media
+media/
+backend/media/
+
+# Environment secrets
+.env
+backend/.env
+
+# Database (optional local)
+*.sqlite3
+
+# MacOS
+.DS_Store
+.DS_Store?
+._*
+
+# IDE
+.idea/
+.vscode/
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/

@@ -2,8 +2,8 @@ from rest_framework import views, response, status, permissions
 from django.shortcuts import get_object_or_404
 from apps.catalog.models import Book
 from apps.summaries.models import SummarySection
-from .models import UserBookProgress, UserSectionProgress, UserAudioProgress, UserSummaryProgress
-from .serializers import UserBookProgressSerializer, UserAudioProgressSerializer, UserSummaryProgressSerializer
+from .models import UserBookProgress, UserSectionProgress, UserAudioProgress, UserSummaryProgress, UserFullBookProgress
+from .serializers import UserBookProgressSerializer, UserAudioProgressSerializer, UserSummaryProgressSerializer, UserFullBookProgressSerializer
 
 class ReadProgressView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -76,3 +76,26 @@ class AudioProgressView(views.APIView):
         progress.save()
 
         return response.Response(UserAudioProgressSerializer(progress).data)
+
+
+class FullBookProgressView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, book_id):
+        book = get_object_or_404(Book, id=book_id)
+        progress, _ = UserFullBookProgress.objects.get_or_create(
+            user=request.user,
+            book=book,
+        )
+        return response.Response(UserFullBookProgressSerializer(progress).data)
+
+    def post(self, request, book_id):
+        book = get_object_or_404(Book, id=book_id)
+        progress, _ = UserFullBookProgress.objects.get_or_create(
+            user=request.user,
+            book=book,
+        )
+        progress.current_page = int(request.data.get('current_page', 0) or 0)
+        progress.current_offset = float(request.data.get('current_offset', 0.0) or 0.0)
+        progress.save()
+        return response.Response(UserFullBookProgressSerializer(progress).data)

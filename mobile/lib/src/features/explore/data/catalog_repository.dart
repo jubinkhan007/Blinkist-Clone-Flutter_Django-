@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import '../../../../core/networking/api_client.dart';
+import '../../reader/presentation/reader_options_provider.dart';
 import '../domain/catalog_models.dart';
 
 part 'catalog_repository.g.dart';
@@ -21,17 +24,19 @@ class CatalogRepository {
     String? categorySlug,
     int page = 1,
   }) async {
-    Map<String, dynamic> queryParameters = {'page': page};
-    if (query != null && query.isNotEmpty) queryParameters['search'] = query;
-    if (categorySlug != null)
+    final Map<String, dynamic> queryParameters = {'page': page};
+    if (query != null && query.isNotEmpty) {
+      queryParameters['search'] = query;
+    }
+    if (categorySlug != null) {
       queryParameters['categories__slug'] = categorySlug;
+    }
 
     final response = await _dio.get(
       '/catalog/books/',
       queryParameters: queryParameters,
     );
 
-    // Handing paginated DRF response format: { "count": XX, "next": "...", "previous": null, "results": [...] }
     final List data = response.data['results'];
     return data.map((json) => Book.fromJson(json)).toList();
   }
@@ -54,3 +59,39 @@ Future<List<Book>> books(BooksRef ref, {String? query, String? categorySlug}) {
       .watch(catalogRepositoryProvider)
       .getBooks(query: query, categorySlug: categorySlug);
 }
+
+class SearchHistoryNotifier extends StateNotifier<List<String>> {
+  SearchHistoryNotifier(this._ref) : super(_load(_ref));
+
+  final Ref _ref;
+  static const _key = 'explore_recent_searches';
+
+  static List<String> _load(Ref ref) {
+    final prefs = ref.read(sharedPreferencesProvider);
+    return prefs.getStringList(_key) ?? <String>[];
+  }
+
+  Future<void> add(String query) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final next = [
+      normalized,
+      ...state.where((item) => item.toLowerCase() != normalized.toLowerCase()),
+    ].take(10).toList();
+    state = next;
+    await _ref.read(sharedPreferencesProvider).setStringList(_key, next);
+  }
+
+  Future<void> clear() async {
+    state = [];
+    await _ref.read(sharedPreferencesProvider).remove(_key);
+  }
+}
+
+final searchHistoryProvider =
+    StateNotifierProvider<SearchHistoryNotifier, List<String>>((ref) {
+      return SearchHistoryNotifier(ref);
+    });

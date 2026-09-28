@@ -57,6 +57,8 @@ class Book {
   final String? coverImageUrl;
   final int estimatedReadTimeMinutes;
   final bool isPremium;
+  final bool isSaved;
+  final bool isDailyFree;
 
   Book({
     required this.id,
@@ -68,6 +70,8 @@ class Book {
     this.coverImageUrl,
     required this.estimatedReadTimeMinutes,
     required this.isPremium,
+    required this.isSaved,
+    this.isDailyFree = false,
   });
 
   factory Book.fromJson(Map<String, dynamic> json) {
@@ -83,6 +87,8 @@ class Book {
       coverImageUrl: json['cover_image_url'],
       estimatedReadTimeMinutes: json['estimated_read_time_minutes'] ?? 15,
       isPremium: json['is_premium'] ?? false,
+      isSaved: json['is_saved'] ?? false,
+      isDailyFree: json['is_daily_free'] ?? false,
     );
   }
 }

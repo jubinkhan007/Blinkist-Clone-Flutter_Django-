@@ -7,8 +7,10 @@ import '../../src/features/book/presentation/book_detail_screen.dart';
 import '../../src/features/reader/presentation/reader_screen.dart';
 import '../../src/features/reader/presentation/audio_player_screen.dart';
 import '../../src/features/reader/presentation/full_book_screen.dart';
+import '../../src/features/profile/presentation/edit_profile_screen.dart';
 import '../../src/features/profile/presentation/profile_screen.dart';
 import '../../src/features/library/presentation/downloads_screen.dart';
+import '../../src/features/subscription/presentation/payment_return_screen.dart';
 import '../../src/features/subscription/presentation/paywall_screen.dart';
 
 // Keys for nested navigation
@@ -78,6 +80,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final title = state.uri.queryParameters['title'];
           return PaywallScreen(bookSlug: slug, bookTitle: title);
         },
+      ),
+      GoRoute(
+        path: '/payment-return',
+        builder: (context, state) {
+          final status = state.uri.queryParameters['status'] ?? 'unknown';
+          final tranId = state.uri.queryParameters['tran_id'];
+          return PaymentReturnScreen(status: status, tranId: tranId);
+        },
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        builder: (context, state) => const EditProfileScreen(),
       ),
     ],
   );

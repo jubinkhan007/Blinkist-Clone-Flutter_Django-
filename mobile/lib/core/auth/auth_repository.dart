@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../networking/api_client.dart';
+import '../../src/features/reader/presentation/reader_options_provider.dart';
 
 class AuthUser {
   final int id;
@@ -30,16 +32,41 @@ class AuthUser {
 class AuthRepository {
   final Dio _dio;
   final FlutterSecureStorage _storage;
+  final SharedPreferences _prefs;
 
-  AuthRepository(this._dio, this._storage);
+  AuthRepository(this._dio, this._storage, this._prefs);
 
   void _log(String message) {
     debugPrint('[AuthRepository] $message');
   }
 
+  Future<String?> _readToken(String key) async {
+    final secureValue = await _storage.read(key: key);
+    if (secureValue != null && secureValue.isNotEmpty) {
+      return secureValue;
+    }
+    final prefsValue = _prefs.getString(key);
+    if (prefsValue != null && prefsValue.isNotEmpty) {
+      _log('Recovered $key from SharedPreferences fallback');
+      await _storage.write(key: key, value: prefsValue);
+      return prefsValue;
+    }
+    return null;
+  }
+
+  Future<void> _writeToken(String key, String value) async {
+    await _storage.write(key: key, value: value);
+    await _prefs.setString(key, value);
+  }
+
+  Future<void> _deleteToken(String key) async {
+    await _storage.delete(key: key);
+    await _prefs.remove(key);
+  }
+
   Future<bool> isLoggedIn() async {
-    final accessToken = await _storage.read(key: 'access_token');
-    final refreshToken = await _storage.read(key: 'refresh_token');
+    final accessToken = await _readToken('access_token');
+    final refreshToken = await _readToken('refresh_token');
     final loggedIn =
         (accessToken != null && accessToken.isNotEmpty) ||
         (refreshToken != null && refreshToken.isNotEmpty);
@@ -64,8 +91,8 @@ class AuthRepository {
       throw StateError('Login response missing tokens.');
     }
 
-    await _storage.write(key: 'access_token', value: access);
-    await _storage.write(key: 'refresh_token', value: refresh);
+    await _writeToken('access_token', access);
+    await _writeToken('refresh_token', refresh);
     _log('Stored access and refresh tokens after login');
   }
 
@@ -87,8 +114,8 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    await _storage.delete(key: 'access_token');
-    await _storage.delete(key: 'refresh_token');
+    await _deleteToken('access_token');
+    await _deleteToken('refresh_token');
     _log('Cleared access and refresh tokens');
   }
 
@@ -108,7 +135,8 @@ class AuthRepository {
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final dio = ref.watch(dioProvider);
   final storage = ref.watch(secureStorageProvider);
-  return AuthRepository(dio, storage);
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return AuthRepository(dio, storage, prefs);
 });
 
 final authStatusProvider = FutureProvider<bool>((ref) async {

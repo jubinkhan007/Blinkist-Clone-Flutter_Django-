@@ -72,6 +72,7 @@ class UserFullBookProgress(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='full_book_progress')
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='user_full_book_progress')
     current_page = models.IntegerField(default=0)
+    current_offset = models.FloatField(default=0.0)
     last_opened_at = models.DateTimeField(auto_now=True)
 
     class Meta:

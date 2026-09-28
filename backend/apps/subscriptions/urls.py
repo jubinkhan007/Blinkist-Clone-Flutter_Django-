@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CancelSubscriptionView,
     InitiatePaymentView,
     PaymentCancelView,
     PaymentFailView,
@@ -16,5 +17,6 @@ urlpatterns = [
     path("cancel/", PaymentCancelView.as_view(), name="payments_cancel"),
     path("ipn/", PaymentIPNView.as_view(), name="payments_ipn"),
     path("mock/checkout/", MockCheckoutView.as_view(), name="payments_mock"),
+    path("subscription/cancel/", CancelSubscriptionView.as_view(), name="subscription_cancel"),
 ]
 

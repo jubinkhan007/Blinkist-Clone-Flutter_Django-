@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
-import '../../../../core/networking/api_client.dart';
+import 'package:audio_service/audio_service.dart';
+import '../../../../main.dart';
 import '../../book/domain/book_models.dart';
-
 import '../../progress/data/progress_repository.dart';
+import '../data/audio_handler.dart';
 
 class AudioState {
   static const Object _unset = Object();
@@ -73,25 +73,47 @@ class AudioState {
 }
 
 class AudioController extends StateNotifier<AudioState> {
-  final AudioPlayer _player = AudioPlayer();
+  final AppAudioHandler _handler;
   final ProgressRepository _progressRepository;
   List<SummarySection> _sections = [];
 
-  AudioController(this._progressRepository) : super(const AudioState()) {
-    _player.positionStream.listen((pos) {
-      state = state.copyWith(currentPosition: pos);
-    });
-    _player.durationStream.listen((dur) {
-      // Only apply when the player resolves a precise value — never wipe with null
-      if (dur != null) state = state.copyWith(duration: dur);
-    });
-    _player.playingStream.listen((playing) {
-      state = state.copyWith(isPlaying: playing);
-    });
-    _player.playerStateStream.listen((playerState) {
-      if (playerState.processingState == ProcessingState.completed) {
+  AudioController(this._handler, this._progressRepository) : super(const AudioState()) {
+    _init();
+  }
+
+  void _init() {
+    // Listen to playback state changes
+    _handler.playbackState.listen((ps) {
+      state = state.copyWith(
+        isPlaying: ps.playing,
+        playbackSpeed: ps.speed,
+        isLoading: ps.processingState == AudioProcessingState.loading ||
+            ps.processingState == AudioProcessingState.buffering,
+      );
+
+      if (ps.processingState == AudioProcessingState.completed) {
         _onSectionComplete();
       }
+    });
+
+    // Listen to current media item changes
+    _handler.mediaItem.listen((item) {
+      if (item != null) {
+        final index = _sections.indexWhere((s) => s.id.toString() == item.id || s.title == item.title);
+        state = state.copyWith(
+          currentIndex: index >= 0 ? index : state.currentIndex,
+          currentSectionTitle: item.title,
+          duration: item.duration,
+          bookId: item.extras?['bookId'],
+          bookSlug: item.extras?['bookSlug'],
+          bookTitle: item.extras?['bookTitle'],
+        );
+      }
+    });
+
+    // Listen to position changes
+    AudioService.position.listen((pos) {
+      state = state.copyWith(currentPosition: pos);
     });
   }
 
@@ -156,113 +178,60 @@ class AudioController extends StateNotifier<AudioState> {
       return;
     }
 
-    final normalizedStartIndex = initialIndex.clamp(0, _sections.length - 1);
-    final loaded = await _loadSection(normalizedStartIndex);
-
-    if (initialPosition > Duration.zero) {
-      await _player.seek(initialPosition);
-    }
-
-    if (!autoPlay) return;
-    if (loaded) {
-      await _player.play();
+    // Filter sections that have audio
+    final playableSections = _sections.where((s) => s.audioUrl != null && s.audioUrl!.isNotEmpty).toList();
+    
+    if (playableSections.isEmpty) {
+      state = state.copyWith(isLoading: false, errorMessage: 'No audio sections available.');
       return;
     }
 
-    // If the requested section has no audio, try to find the next playable section.
-    for (var i = normalizedStartIndex + 1; i < _sections.length; i++) {
-      final ok = await _loadSection(i);
-      if (ok) {
-        await _player.play();
-        return;
-      }
-    }
-  }
+    final mediaItems = playableSections.map((s) => MediaItem(
+      id: s.audioUrl!,
+      album: bookTitle,
+      title: s.title,
+      artist: 'Blinkist Clone', // Could be book author if available
+      duration: s.durationSeconds > 0 ? Duration(seconds: s.durationSeconds) : null,
+      extras: {
+        'bookId': bookId,
+        'bookSlug': bookSlug,
+        'bookTitle': bookTitle,
+        'sectionId': s.id,
+      },
+    )).toList();
 
-  Future<bool> _loadSection(int index) async {
-    if (index < 0 || index >= _sections.length) return false;
-    final section = _sections[index];
-    final url = section.audioUrl?.trim();
-
-    // Use the section's known duration immediately so the UI has something to show
-    final sectionDuration = section.durationSeconds > 0
-        ? Duration(seconds: section.durationSeconds)
-        : null;
-
-    // Direct construction — copyWith can't set nullable fields to null
-    state = AudioState(
-      bookId: state.bookId,
-      bookSlug: state.bookSlug,
-      bookTitle: state.bookTitle,
-      totalSections: state.totalSections,
-      currentIndex: index,
-      currentSectionTitle: section.title,
-      currentPosition: Duration.zero,
-      duration: sectionDuration,
-      isPlaying: state.isPlaying,
-      playbackSpeed: state.playbackSpeed,
-      isLoading: true,
-      errorMessage: null,
-    );
-
-    if (url == null || url.isEmpty) {
-      await _player.stop();
-      state = state.copyWith(
-        isLoading: false,
-        isPlaying: false,
-        errorMessage: 'No audio for this section.',
-      );
-      return false;
-    }
+    // Find the adjusted initial index in the playable list
+    final targetSectionId = _sections[initialIndex.clamp(0, _sections.length - 1)].id;
+    int adjustedIndex = mediaItems.indexWhere((item) => item.extras?['sectionId'] == targetSectionId);
+    if (adjustedIndex < 0) adjustedIndex = 0;
 
     try {
-      Duration? dur;
-      if (url.startsWith('file://')) {
-        final path = url.replaceFirst('file://', '');
-        dur = await _player.setFilePath(path);
-      } else {
-        final resolvedUrl = resolveServerUrl(url);
-        dur = await _player.setUrl(resolvedUrl);
+      await _handler.loadPlaylist(mediaItems, initialIndex: adjustedIndex);
+      
+      if (initialPosition > Duration.zero) {
+        await _handler.seek(initialPosition);
       }
-      // Prefer the precise player duration; fall back to the section metadata
-      final effectiveDuration = dur ?? _player.duration ?? sectionDuration;
-      state = AudioState(
-        bookId: state.bookId,
-        bookSlug: state.bookSlug,
-        bookTitle: state.bookTitle,
-        totalSections: state.totalSections,
-        currentIndex: state.currentIndex,
-        currentSectionTitle: state.currentSectionTitle,
-        currentPosition: Duration.zero,
-        duration: effectiveDuration,
-        isPlaying: state.isPlaying,
-        playbackSpeed: state.playbackSpeed,
-        isLoading: false,
-        errorMessage: null,
-      );
-      return true;
+
+      if (autoPlay) {
+        await _handler.play();
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Failed to load audio.',
       );
       debugPrint('AudioController error: $e');
-      return false;
     }
   }
 
   void _onSectionComplete() {
     _saveProgress(isFinished: true);
-    if (state.currentIndex < _sections.length - 1) {
-      skipNext();
-    } else {
-      state = state.copyWith(isPlaying: false);
-    }
+    // audio_service / just_audio handles skipping to next in playlist
   }
 
-  Future<void> play() => _player.play();
+  Future<void> play() => _handler.play();
   Future<void> pause() async {
-    await _player.pause();
+    await _handler.pause();
     await _saveProgress();
   }
 
@@ -274,54 +243,34 @@ class AudioController extends StateNotifier<AudioState> {
     }
   }
 
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) => _handler.seek(position);
 
-  Future<void> skipNext() async {
-    for (var i = state.currentIndex + 1; i < _sections.length; i++) {
-      final ok = await _loadSection(i);
-      if (ok) {
-        await _player.play();
-        return;
-      }
-    }
-    await _player.stop();
-    await _saveProgress();
-    state = state.copyWith(isPlaying: false);
-  }
+  Future<void> skipNext() => _handler.skipToNext();
 
-  Future<void> skipPrevious() async {
-    // If more than 3s in, restart; otherwise go back
-    if (state.currentPosition.inSeconds > 3) {
-      await _player.seek(Duration.zero);
-    } else {
-      for (var i = state.currentIndex - 1; i >= 0; i--) {
-        final ok = await _loadSection(i);
-        if (ok) {
-          await _player.play();
-          return;
-        }
-      }
-      await _player.stop();
-      await _saveProgress();
-      state = state.copyWith(isPlaying: false);
-    }
-  }
+  Future<void> skipPrevious() => _handler.skipToPrevious();
 
   Future<void> jumpToSection(int index) async {
-    final ok = await _loadSection(index);
-    if (ok) {
-      await _player.play();
+    final sectionId = _sections[index].id;
+    final queue = _handler.queue.value;
+    final queueIndex = queue.indexWhere((item) => item.extras?['sectionId'] == sectionId);
+    
+    if (queueIndex >= 0) {
+      await _handler.skipToQueueItem(queueIndex);
+      await _handler.play();
+    } else {
+      // If section not in queue (maybe it had no audio), we can't jump to it
+      state = state.copyWith(errorMessage: 'No audio for this section.');
     }
   }
 
   Future<void> setSpeed(double speed) async {
-    await _player.setSpeed(speed);
-    state = state.copyWith(playbackSpeed: speed);
+    await _handler.setPlaybackSpeed(speed);
+    // state is updated via listener
   }
 
   Future<void> stop({bool clearQueue = false}) async {
     await _saveProgress();
-    await _player.stop();
+    await _handler.stop();
     if (clearQueue) {
       _sections = [];
       state = const AudioState();
@@ -346,7 +295,7 @@ class AudioController extends StateNotifier<AudioState> {
 
   @override
   void dispose() {
-    _player.dispose();
+    // We don't dispose the handler here as it's a singleton in main
     super.dispose();
   }
 }
@@ -354,5 +303,6 @@ class AudioController extends StateNotifier<AudioState> {
 final audioControllerProvider =
     StateNotifierProvider<AudioController, AudioState>((ref) {
       final repo = ref.watch(progressRepositoryProvider);
-      return AudioController(repo);
+      final handler = ref.watch(audioHandlerProvider);
+      return AudioController(handler, repo);
     });

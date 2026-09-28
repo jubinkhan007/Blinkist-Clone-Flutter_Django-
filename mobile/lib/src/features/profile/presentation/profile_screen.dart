@@ -22,6 +22,11 @@ class ProfileScreen extends ConsumerWidget {
         title: const Text('Account'),
         actions: [
           IconButton(
+            tooltip: 'Edit profile',
+            onPressed: () => context.push('/profile/edit'),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
             tooltip: 'Refresh',
             onPressed: () => ref.invalidate(subscriptionInfoProvider),
             icon: const Icon(Icons.refresh),
@@ -150,6 +155,17 @@ class ProfileScreen extends ConsumerWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
+                                if ((sub.bio ?? '').trim().isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    sub.bio!.trim(),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -248,6 +264,27 @@ class ProfileScreen extends ConsumerWidget {
                               ),
                             ],
                           ),
+                          if (status == 'active') ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
+                                  side: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.error.withOpacity(0.5),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.cancel_outlined),
+                                label: const Text('Cancel subscription'),
+                                onPressed: () => _confirmCancel(context, ref),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -305,6 +342,49 @@ class ProfileScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Failed to load auth status: $e')),
       ),
     );
+  }
+}
+
+Future<void> _confirmCancel(BuildContext context, WidgetRef ref) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Cancel Premium?'),
+      content: const Text(
+        'You\'ll lose access to premium features at the end of the current period.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep Premium'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(ctx).colorScheme.error,
+          ),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Cancel Subscription'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    await ref.read(subscriptionRepositoryProvider).cancelSubscription();
+    ref.invalidate(subscriptionInfoProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Subscription cancelled.')));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to cancel: $e')));
+    }
   }
 }
 

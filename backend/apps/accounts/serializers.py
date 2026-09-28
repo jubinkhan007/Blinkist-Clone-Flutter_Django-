@@ -76,3 +76,24 @@ class RegisterSerializer(serializers.ModelSerializer):
             user.subscription_status = User.SubscriptionStatus.TRIALING
             user.save(update_fields=['trial_started_at', 'subscription_status'])
         return user
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            'first_name',
+            'last_name',
+            'bio',
+            'avatar_url',
+        )
+
+    def validate_first_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('First name is required.')
+        return value.strip()
+
+    def validate_last_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Last name is required.')
+        return value.strip()

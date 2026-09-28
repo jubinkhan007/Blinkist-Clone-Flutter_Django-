@@ -10,7 +10,7 @@ from django.urls import path
 
 from apps.summaries.models import SummarySection
 
-from .models import Author, Book, Category
+from .models import Author, Book, Category, ContentIngestionJob, DailyPick
 
 
 class SummarySectionInline(admin.StackedInline):
@@ -38,6 +38,27 @@ class JsonImportForm(forms.Form):
                   're-import them from the JSON. Uncheck to skip books that '
                   'already have sections.',
     )
+
+
+@admin.register(ContentIngestionJob)
+class ContentIngestionJobAdmin(admin.ModelAdmin):
+    list_display = ('id', 'status', 'book', 'created_at')
+    list_filter = ('status',)
+    readonly_fields = ('status', 'book', 'logs', 'created_at', 'updated_at')
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Only on creation
+            obj.status = 'PENDING'
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(DailyPick)
+class DailyPickAdmin(admin.ModelAdmin):
+    list_display = ('date', 'book', 'created_at')
+    list_filter = ('date',)
+    date_hierarchy = 'date'
+    raw_id_fields = ('book',)
+    search_fields = ('book__title', 'book__author__name')
 
 
 @admin.register(Category)

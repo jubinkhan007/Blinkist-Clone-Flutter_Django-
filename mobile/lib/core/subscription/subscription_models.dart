@@ -3,6 +3,7 @@ class SubscriptionInfo {
   final String? username;
   final String? firstName;
   final String? lastName;
+  final String? bio;
   final String? avatarUrl;
   final bool isPremium;
   final int trialDaysRemaining;
@@ -14,6 +15,7 @@ class SubscriptionInfo {
     required this.username,
     required this.firstName,
     required this.lastName,
+    required this.bio,
     required this.avatarUrl,
     required this.isPremium,
     required this.trialDaysRemaining,
@@ -28,6 +30,7 @@ class SubscriptionInfo {
       username: json['username'] as String?,
       firstName: json['first_name'] as String?,
       lastName: json['last_name'] as String?,
+      bio: json['bio'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       isPremium: json['is_premium'] == true,
       trialDaysRemaining: (json['trial_days_remaining'] as num?)?.toInt() ?? 0,

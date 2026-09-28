@@ -38,6 +38,14 @@ class ContentRepository {
     final response = await _dio.get('/catalog/books/$slug/');
     return BookDetail.fromJson(response.data);
   }
+
+  Future<List<SummarySection>> getSummarySections(String slug) async {
+    final response = await _dio.get('/summaries/$slug/');
+    final data = response.data as List<dynamic>;
+    return data
+        .map((item) => SummarySection.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 @riverpod
@@ -55,3 +63,8 @@ Future<HomeMerchandising> homeFeed(HomeFeedRef ref) {
 Future<BookDetail> bookDetail(BookDetailRef ref, String slug) {
   return ref.watch(contentRepositoryProvider).getBookDetail(slug);
 }
+
+final summarySectionsProvider =
+    FutureProvider.family<List<SummarySection>, String>((ref, slug) {
+      return ref.watch(contentRepositoryProvider).getSummarySections(slug);
+    });

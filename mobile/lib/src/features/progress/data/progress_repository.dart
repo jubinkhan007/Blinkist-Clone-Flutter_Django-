@@ -54,6 +54,29 @@ class UserAudioProgress {
   }
 }
 
+class UserFullBookProgress {
+  final int id;
+  final int bookId;
+  final int currentPage;
+  final double currentOffset;
+
+  UserFullBookProgress({
+    required this.id,
+    required this.bookId,
+    required this.currentPage,
+    required this.currentOffset,
+  });
+
+  factory UserFullBookProgress.fromJson(Map<String, dynamic> json) {
+    return UserFullBookProgress(
+      id: json['id'],
+      bookId: json['book'],
+      currentPage: (json['current_page'] as num?)?.toInt() ?? 0,
+      currentOffset: (json['current_offset'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class ProgressRepository {
   final Dio _dio;
 
@@ -91,6 +114,23 @@ class ProgressRepository {
       },
     );
     return UserAudioProgress.fromJson(response.data);
+  }
+
+  Future<UserFullBookProgress> getFullBookProgress(int bookId) async {
+    final response = await _dio.get('/progress/books/$bookId/full/');
+    return UserFullBookProgress.fromJson(response.data);
+  }
+
+  Future<UserFullBookProgress> saveFullBookProgress({
+    required int bookId,
+    required int currentPage,
+    required double currentOffset,
+  }) async {
+    final response = await _dio.post(
+      '/progress/books/$bookId/full/',
+      data: {'current_page': currentPage, 'current_offset': currentOffset},
+    );
+    return UserFullBookProgress.fromJson(response.data);
   }
 }
 

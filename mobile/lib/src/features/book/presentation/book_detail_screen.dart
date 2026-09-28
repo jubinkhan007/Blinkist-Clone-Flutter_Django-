@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../../../core/subscription/subscription_repository.dart';
+import '../../explore/domain/catalog_models.dart';
+import '../../library/data/library_repository.dart';
 import '../../library/data/offline_downloads_service.dart';
 import '../data/content_repository.dart';
 import '../domain/book_models.dart';
@@ -118,11 +120,13 @@ class BookDetailScreen extends ConsumerWidget {
     );
     final downloads = ref.watch(offlineDownloadsProvider);
     final downloadTask = downloads[slug];
+    final savedState = ref.watch(savedBooksProvider);
 
     return Scaffold(
       body: bookDetailAsync.when(
         data: (book) {
-          final isLocked = book.isPremium && !hasPremiumAccess;
+          final saved = savedState[book.slug] ?? book.isSaved;
+          final isLocked = book.isPremium && !hasPremiumAccess && !book.isDailyFree;
           final coverUrl = book.coverImageUrl?.trim();
           final resolvedCoverUrl = (coverUrl == null || coverUrl.isEmpty)
               ? null
@@ -137,6 +141,29 @@ class BookDetailScreen extends ConsumerWidget {
               SliverAppBar(
                 expandedHeight: 300,
                 pinned: true,
+                actions: [
+                  IconButton(
+                    tooltip: saved ? 'Remove bookmark' : 'Save book',
+                    icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border),
+                    onPressed: () => _toggleSaved(
+                      context,
+                      ref,
+                      Book(
+                        id: book.id,
+                        title: book.title,
+                        subtitle: book.subtitle,
+                        slug: book.slug,
+                        author: book.author,
+                        categories: book.categories,
+                        coverImageUrl: book.coverImageUrl,
+                        estimatedReadTimeMinutes: book.estimatedReadTimeMinutes,
+                        isPremium: book.isPremium,
+                        isSaved: saved,
+                        isDailyFree: book.isDailyFree,
+                      ),
+                    ),
+                  ),
+                ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: resolvedCoverUrl != null
                       ? Image.network(resolvedCoverUrl, fit: BoxFit.cover)
@@ -168,7 +195,9 @@ class BookDetailScreen extends ConsumerWidget {
                               padding: const EdgeInsets.only(left: 8, top: 6),
                               child: Chip(
                                 label: Text(
-                                  isLocked ? 'Premium 🔒' : 'Premium',
+                                  book.isDailyFree
+                                      ? 'Free Today ⭐'
+                                      : (isLocked ? 'Premium 🔒' : 'Premium'),
                                 ),
                               ),
                             ),
@@ -184,6 +213,44 @@ class BookDetailScreen extends ConsumerWidget {
                                   context,
                                 ).colorScheme.onSurfaceVariant,
                               ),
+                        ),
+                      ],
+                      if (book.isDailyFree && !hasPremiumAccess) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.bolt_rounded,
+                                color: Colors.orange,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Free Blink of the Day — full summary unlocked today!',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -289,6 +356,21 @@ class BookDetailScreen extends ConsumerWidget {
         error: (error, stack) =>
             Center(child: Text('Error loading book: $error')),
       ),
+    );
+  }
+}
+
+Future<void> _toggleSaved(
+  BuildContext context,
+  WidgetRef ref,
+  Book book,
+) async {
+  try {
+    await ref.read(savedBooksProvider.notifier).toggle(book);
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not update saved books: $error')),
     );
   }
 }

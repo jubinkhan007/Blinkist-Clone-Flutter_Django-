@@ -1,9 +1,11 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import permissions
 from django.db.models import QuerySet
-from apps.catalog.models import Book
+from rest_framework import permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from apps.catalog.serializers import BookListSerializer
+from apps.home.serializers import ContinueReadingSerializer
+from apps.home.services import get_home_feed_for_user
 
 class HomeMerchandisingView(APIView):
     permission_classes = (permissions.AllowAny,)
@@ -12,16 +14,23 @@ class HomeMerchandisingView(APIView):
         # In a real app, these querysets would be driven by a CMS or recommendation engine.
         # For MVP, we use simple static rules.
 
-        featured_qs: QuerySet[Book] = Book.objects.filter(is_premium=True).order_by('?')[:5]
-        recently_added_qs: QuerySet[Book] = Book.objects.all().order_by('-created_at')[:10]
-        recommended_qs: QuerySet[Book] = Book.objects.all().order_by('?')[:10]
+        feed = get_home_feed_for_user(request.user)
+        featured_qs: QuerySet = feed['featured']
+        recently_added_qs: QuerySet = feed['recently_added']
+        recommended_qs: QuerySet = feed['recommended']
+        continue_reading_data = feed['continue_reading']
 
-        # In a future pass after progress logic is ready, we integrate 'continue_reading'
-        continue_reading_data = []
+        daily_pick_book = feed.get('daily_pick')
+        daily_pick_data = (
+            BookListSerializer(daily_pick_book, context={'request': request}).data
+            if daily_pick_book
+            else None
+        )
 
         return Response({
-            'featured': BookListSerializer(featured_qs, many=True).data,
-            'recently_added': BookListSerializer(recently_added_qs, many=True).data,
-            'recommended': BookListSerializer(recommended_qs, many=True).data,
-            'continue_reading': continue_reading_data,
+            'daily_pick': daily_pick_data,
+            'featured': BookListSerializer(featured_qs, many=True, context={'request': request}).data,
+            'recently_added': BookListSerializer(recently_added_qs, many=True, context={'request': request}).data,
+            'recommended': BookListSerializer(recommended_qs, many=True, context={'request': request}).data,
+            'continue_reading': ContinueReadingSerializer(continue_reading_data, many=True, context={'request': request}).data,
         })
