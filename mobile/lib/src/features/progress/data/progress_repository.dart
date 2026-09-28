@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/networking/api_client.dart';
+import '../domain/reading_stats_models.dart';
 
 part 'progress_repository.g.dart';
 
@@ -132,6 +134,24 @@ class ProgressRepository {
     );
     return UserFullBookProgress.fromJson(response.data);
   }
+
+  Future<UserReadingStats> getReadingStats() async {
+    try {
+      final response = await _dio.get('/progress/stats/');
+      return UserReadingStats.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return UserReadingStats.empty();
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> recordActivity() async {
+    try {
+      await _dio.post('/progress/activity/');
+    } catch (_) {}
+  }
 }
 
 @riverpod
@@ -139,3 +159,8 @@ ProgressRepository progressRepository(ProgressRepositoryRef ref) {
   final dio = ref.watch(dioProvider);
   return ProgressRepository(dio: dio);
 }
+
+final readingStatsProvider = FutureProvider<UserReadingStats>((ref) async {
+  return ref.watch(progressRepositoryProvider).getReadingStats();
+});
+

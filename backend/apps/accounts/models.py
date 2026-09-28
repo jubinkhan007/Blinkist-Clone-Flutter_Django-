@@ -31,6 +31,11 @@ class User(AbstractUser):
     bio = models.TextField(blank=True, null=True)
     avatar_url = models.URLField(blank=True, null=True)
 
+    # Streak & Gamification fields
+    current_streak = models.PositiveIntegerField(default=0)
+    longest_streak = models.PositiveIntegerField(default=0)
+    last_active_date = models.DateField(blank=True, null=True)
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
@@ -68,6 +73,46 @@ class User(AbstractUser):
         if seconds <= 0:
             return 0
         return int(math.ceil(seconds / 86400))
+
+    def get_current_streak(self, today=None) -> int:
+        """
+        Calculates the active streak.
+        If user missed reading yesterday and has not yet read today, streak is 0.
+        """
+        if today is None:
+            today = timezone.localdate()
+
+        if not self.last_active_date:
+            return 0
+
+        if self.last_active_date < today - timedelta(days=1):
+            return 0
+
+        return self.current_streak
+
+    def record_reading_activity(self, today=None) -> bool:
+        """
+        Records reading activity for the user.
+        Updates current_streak and longest_streak idempotently for today.
+        Returns True if a new day's activity was recorded, False if already recorded today.
+        """
+        if today is None:
+            today = timezone.localdate()
+
+        if self.last_active_date == today:
+            return False
+
+        if self.last_active_date == today - timedelta(days=1):
+            self.current_streak += 1
+        else:
+            self.current_streak = 1
+
+        if self.current_streak > self.longest_streak:
+            self.longest_streak = self.current_streak
+
+        self.last_active_date = today
+        self.save(update_fields=['current_streak', 'longest_streak', 'last_active_date'])
+        return True
 
     def __str__(self):
         return self.email

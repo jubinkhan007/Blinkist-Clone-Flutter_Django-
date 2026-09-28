@@ -80,3 +80,18 @@ class UserFullBookProgress(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.book.title} (full book)"
+
+
+class UserDailyActivity(models.Model):
+    """Tracks which days a user was active reading/listening, for habit graphs and streak verification."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_activities')
+    date = models.DateField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'date')
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.date}"
+

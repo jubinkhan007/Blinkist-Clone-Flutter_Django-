@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/auth/auth_repository.dart';
 import '../../../../core/subscription/subscription_repository.dart';
 import '../../auth/presentation/auth_screen.dart';
+import '../../progress/data/progress_repository.dart';
+import '../../progress/domain/reading_stats_models.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -28,7 +30,10 @@ class ProfileScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(subscriptionInfoProvider),
+            onPressed: () {
+              ref.invalidate(subscriptionInfoProvider);
+              ref.invalidate(readingStatsProvider);
+            },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -183,6 +188,8 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  const _ReadingHabitsAndStatsCard(),
                   const SizedBox(height: 16),
                   Card(
                     elevation: 0,
@@ -463,3 +470,272 @@ class _KeyValue extends StatelessWidget {
     );
   }
 }
+
+class _ReadingHabitsAndStatsCard extends ConsumerWidget {
+  const _ReadingHabitsAndStatsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(readingStatsProvider);
+
+    return statsAsync.when(
+      data: (stats) {
+        final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+        final todayWeekdayIndex = DateTime.now().weekday - 1; // 0 = Mon, 6 = Sun
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with Flame Icon
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('🔥', style: TextStyle(fontSize: 20)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Reading Habits & Stats',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '🏆 Best: ${stats.longestStreak}d',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Streak Banner
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: stats.isActiveToday
+                        ? Colors.amber.withOpacity(0.12)
+                        : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        stats.isActiveToday
+                            ? Icons.check_circle_rounded
+                            : Icons.schedule_rounded,
+                        color: stats.isActiveToday
+                            ? Colors.green.shade700
+                            : Colors.orange.shade700,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          stats.isActiveToday
+                              ? '${stats.currentStreak}-day streak active today! Great job!'
+                              : (stats.currentStreak > 0
+                                  ? '${stats.currentStreak}-day streak! Read today to keep it going.'
+                                  : 'Read any summary today to start a 1-day streak.'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Weekly Habit Tracker (M T W T F S S)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: List.generate(7, (i) {
+                    final isDone = i < stats.weeklyActivity.length && stats.weeklyActivity[i];
+                    final isToday = i == todayWeekdayIndex;
+
+                    return Column(
+                      children: [
+                        Text(
+                          weekdays[i],
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                            color: isToday
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: isDone
+                                ? Colors.amber.shade400
+                                : (isToday ? Colors.amber.withOpacity(0.15) : Colors.transparent),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDone
+                                  ? Colors.amber.shade600
+                                  : (isToday ? Colors.amber.shade600 : Colors.grey.withOpacity(0.3)),
+                              width: isToday ? 2.0 : 1.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: isDone
+                                ? const Icon(Icons.check, size: 16, color: Colors.black87)
+                                : (isToday
+                                    ? const Icon(Icons.star_outline, size: 14, color: Colors.amber)
+                                    : null),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+
+                // Lifetime 4-Stat Metric Grid
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricTile(
+                        icon: Icons.menu_book_rounded,
+                        color: Colors.blue,
+                        value: '${stats.totalBooksCompleted}',
+                        label: 'Books Finished',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MetricTile(
+                        icon: Icons.article_outlined,
+                        color: Colors.teal,
+                        value: '${stats.totalSectionsRead}',
+                        label: 'Blanks Read',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricTile(
+                        icon: Icons.headphones_rounded,
+                        color: Colors.purple,
+                        value: '${stats.totalAudioMinutes}m',
+                        label: 'Audio Listened',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _MetricTile(
+                        icon: Icons.border_color_rounded,
+                        color: Colors.orange,
+                        value: '${stats.totalHighlights}',
+                        label: 'Quotes Saved',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String value;
+  final String label;
+
+  const _MetricTile({
+    required this.icon,
+    required this.color,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

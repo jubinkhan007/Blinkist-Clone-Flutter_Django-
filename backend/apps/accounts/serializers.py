@@ -7,6 +7,9 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     is_premium = serializers.SerializerMethodField()
     trial_days_remaining = serializers.SerializerMethodField()
+    current_streak = serializers.SerializerMethodField()
+    longest_streak = serializers.IntegerField(read_only=True)
+    last_active_date = serializers.DateField(read_only=True)
 
     class Meta:
         model = User
@@ -22,6 +25,9 @@ class UserSerializer(serializers.ModelSerializer):
             'subscription_end_date',
             'bio',
             'avatar_url',
+            'current_streak',
+            'longest_streak',
+            'last_active_date',
         )
         read_only_fields = (
             'id',
@@ -29,6 +35,9 @@ class UserSerializer(serializers.ModelSerializer):
             'trial_days_remaining',
             'subscription_status',
             'subscription_end_date',
+            'current_streak',
+            'longest_streak',
+            'last_active_date',
         )
 
     def get_is_premium(self, obj):
@@ -36,6 +45,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_trial_days_remaining(self, obj):
         return obj.trial_days_remaining()
+
+    def get_current_streak(self, obj):
+        return obj.get_current_streak()
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
 import '../../explore/domain/catalog_models.dart';
+import '../../progress/data/progress_repository.dart';
+import '../../progress/domain/reading_stats_models.dart';
 import '../domain/home_models.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -18,11 +20,13 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('For You'),
         actions: [
+          const _StreakBadge(),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () =>
                 context.push('/explore'), // Assuming GoRouter setup
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: homeFeedAsync.when(
@@ -498,3 +502,225 @@ class _DailyPickHero extends StatelessWidget {
     );
   }
 }
+
+class _StreakBadge extends ConsumerWidget {
+  const _StreakBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(readingStatsProvider);
+
+    return statsAsync.maybeWhen(
+      data: (stats) {
+        final streak = stats.currentStreak;
+        final isActive = stats.isActiveToday;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => _showStreakSheet(context, stats),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? Colors.amber.withOpacity(0.18)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isActive
+                      ? Colors.amber.shade700
+                      : Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  width: 1.2,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🔥',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isActive ? null : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    streak == 0 ? '0d' : '${streak}d',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isActive
+                          ? Colors.amber.shade900
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+
+  void _showStreakSheet(BuildContext context, UserReadingStats stats) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _StreakCelebrationSheet(stats: stats),
+    );
+  }
+}
+
+class _StreakCelebrationSheet extends StatelessWidget {
+  final UserReadingStats stats;
+
+  const _StreakCelebrationSheet({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final todayWeekdayIndex = DateTime.now().weekday - 1; // 0 = Mon, 6 = Sun
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.amber.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text('🔥', style: TextStyle(fontSize: 34)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            stats.currentStreak > 0
+                ? '${stats.currentStreak} Day Reading Streak!'
+                : 'Start Your Reading Habit! 🔥',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            stats.isActiveToday
+                ? "You've read today! Keep this momentum going tomorrow."
+                : "Read or listen to any summary today to keep your streak alive.",
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+
+          // 7-day week calendar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'This Week',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      '🏆 Best: ${stats.longestStreak} days',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: List.generate(7, (i) {
+                    final isDone = i < stats.weeklyActivity.length && stats.weeklyActivity[i];
+                    final isToday = i == todayWeekdayIndex;
+
+                    return Column(
+                      children: [
+                        Text(
+                          weekdays[i],
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                            color: isToday
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isDone
+                                ? Colors.amber.shade400
+                                : (isToday ? Colors.amber.withOpacity(0.15) : Colors.transparent),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDone
+                                  ? Colors.amber.shade600
+                                  : (isToday ? Colors.amber.shade600 : Colors.grey.withOpacity(0.3)),
+                              width: isToday ? 2.0 : 1.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: isDone
+                                ? const Icon(Icons.check, size: 18, color: Colors.black87)
+                                : (isToday
+                                    ? const Icon(Icons.star_outline, size: 16, color: Colors.amber)
+                                    : null),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              icon: const Icon(Icons.menu_book_rounded, size: 18),
+              label: Text(stats.isActiveToday ? 'Explore More Summaries' : 'Read Today\'s Summary'),
+              onPressed: () {
+                Navigator.pop(context);
+                context.push('/explore');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

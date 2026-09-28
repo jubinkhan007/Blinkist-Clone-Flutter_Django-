@@ -29,6 +29,8 @@ class UserHighlightListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         highlight = serializer.save()
+        from apps.progress.views import record_activity
+        record_activity(request.user)
         output_serializer = UserHighlightSerializer(highlight, context={'request': request})
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 
