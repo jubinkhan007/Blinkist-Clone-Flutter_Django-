@@ -28,6 +28,10 @@ class UserSerializer(serializers.ModelSerializer):
             'current_streak',
             'longest_streak',
             'last_active_date',
+            'has_completed_onboarding',
+            'reading_goal',
+            'preferred_format',
+            'interest_topics',
         )
         read_only_fields = (
             'id',
@@ -91,6 +95,11 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    interest_topics = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+    )
+
     class Meta:
         model = User
         fields = (
@@ -98,6 +107,9 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
             'last_name',
             'bio',
             'avatar_url',
+            'reading_goal',
+            'preferred_format',
+            'interest_topics',
         )
 
     def validate_first_name(self, value):
@@ -109,3 +121,42 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise serializers.ValidationError('Last name is required.')
         return value.strip()
+
+
+class OnboardingSubmissionSerializer(serializers.Serializer):
+    reading_goal = serializers.CharField(max_length=50, required=False, allow_blank=True, default='')
+    preferred_format = serializers.CharField(max_length=20, required=False, default='both')
+    interest_topics = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
+
+    def save(self, user):
+        from django.core.cache import cache
+        from apps.catalog.models import Category
+
+        reading_goal = self.validated_data.get('reading_goal', user.reading_goal)
+        preferred_format = self.validated_data.get('preferred_format', user.preferred_format)
+        interest_topics = self.validated_data.get('interest_topics', user.interest_topics)
+
+        user.reading_goal = reading_goal
+        user.preferred_format = preferred_format
+        user.interest_topics = interest_topics
+        user.has_completed_onboarding = True
+        user.save(update_fields=[
+            'reading_goal',
+            'preferred_format',
+            'interest_topics',
+            'has_completed_onboarding',
+        ])
+
+        # Link matching categories
+        if interest_topics:
+            matched_categories = Category.objects.filter(slug__in=interest_topics)
+            user.interest_categories.set(matched_categories)
+
+        # Invalidate home feed cache
+        cache.delete(f'home_feed_{user.id}')
+        return user
+

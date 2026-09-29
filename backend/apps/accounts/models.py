@@ -36,6 +36,13 @@ class User(AbstractUser):
     longest_streak = models.PositiveIntegerField(default=0)
     last_active_date = models.DateField(blank=True, null=True)
 
+    # Onboarding & Personalization fields
+    has_completed_onboarding = models.BooleanField(default=False)
+    reading_goal = models.CharField(max_length=50, blank=True, default='')
+    preferred_format = models.CharField(max_length=20, blank=True, default='both')
+    interest_topics = models.JSONField(default=list, blank=True)
+    interest_categories = models.ManyToManyField('catalog.Category', blank=True, related_name='interested_users')
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 

@@ -8,13 +8,35 @@ import '../../explore/domain/catalog_models.dart';
 import '../../notifications/data/notification_repository.dart';
 import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
+import '../../onboarding/data/onboarding_repository.dart';
 import '../domain/home_models.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _checkedOnboarding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_checkedOnboarding && mounted) {
+        _checkedOnboarding = true;
+        final repo = ref.read(onboardingRepositoryProvider);
+        if (!repo.isCompleted()) {
+          context.push('/onboarding');
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final homeFeedAsync = ref.watch(homeFeedProvider);
 
     return Scaffold(

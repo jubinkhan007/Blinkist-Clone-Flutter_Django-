@@ -11,12 +11,20 @@ class AuthUser {
   final String email;
   final bool isPremium;
   final int trialDaysRemaining;
+  final bool hasCompletedOnboarding;
+  final String readingGoal;
+  final String preferredFormat;
+  final List<String> interestTopics;
 
   AuthUser({
     required this.id,
     required this.email,
     required this.isPremium,
     required this.trialDaysRemaining,
+    required this.hasCompletedOnboarding,
+    required this.readingGoal,
+    required this.preferredFormat,
+    required this.interestTopics,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -25,6 +33,13 @@ class AuthUser {
       email: json['email'],
       isPremium: json['is_premium'] ?? false,
       trialDaysRemaining: json['trial_days_remaining'] ?? 0,
+      hasCompletedOnboarding: json['has_completed_onboarding'] ?? false,
+      readingGoal: json['reading_goal'] as String? ?? '',
+      preferredFormat: json['preferred_format'] as String? ?? 'both',
+      interestTopics: (json['interest_topics'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 }

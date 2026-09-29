@@ -136,7 +136,7 @@ def get_home_feed_for_user(user):
             similar_ids = [bid for bid in similar_ids if bid not in continue_book_ids]
             recommended = Book.objects.filter(id__in=similar_ids[:10])
     
-    # Fallback to category-based or latest if no AI results
+    # Fallback to reading history categories, onboarding interest categories, or latest
     if not recommended:
         category_counts = Counter(
             UserSummaryProgress.objects.filter(user=user)
@@ -151,11 +151,33 @@ def get_home_feed_for_user(user):
         if preferred_category_ids:
             recommended = (
                 Book.objects.filter(categories__id__in=preferred_category_ids)
+                .exclude(id__in=continue_book_ids)
+                .distinct()
+                .order_by('-created_at')[:10]
+            )
+        elif getattr(user, 'interest_categories', None) and user.interest_categories.exists():
+            recommended = (
+                Book.objects.filter(categories__in=user.interest_categories.all())
+                .exclude(id__in=continue_book_ids)
+                .distinct()
+                .order_by('-created_at')[:10]
+            )
+        elif getattr(user, 'interest_topics', None) and user.interest_topics:
+            recommended = (
+                Book.objects.filter(categories__slug__in=user.interest_topics)
+                .exclude(id__in=continue_book_ids)
                 .distinct()
                 .order_by('-created_at')[:10]
             )
         else:
-            recommended = Book.objects.order_by('-created_at')[:10]
+            recommended = (
+                Book.objects.exclude(id__in=continue_book_ids)
+                .order_by('-created_at')[:10]
+            )
+
+    # Ensure recommended rail is populated if catalog allows
+    if not recommended:
+        recommended = Book.objects.order_by('-created_at')[:10]
 
     payload = {
         'daily_pick': daily_pick_book,

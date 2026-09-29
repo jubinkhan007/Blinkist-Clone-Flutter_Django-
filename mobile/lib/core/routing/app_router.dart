@@ -13,6 +13,7 @@ import '../../src/features/library/presentation/downloads_screen.dart';
 import '../../src/features/subscription/presentation/payment_return_screen.dart';
 import '../../src/features/subscription/presentation/paywall_screen.dart';
 import '../../src/features/notifications/presentation/notifications_screen.dart';
+import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 
 // Keys for nested navigation
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -97,6 +98,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
       ),
     ],
   );

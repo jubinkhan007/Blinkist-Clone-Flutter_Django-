@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/auth/auth_repository.dart';
 import '../../../../core/subscription/subscription_repository.dart';
 import '../../../../core/theme/app_theme.dart';
+import 'package:go_router/go_router.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -67,6 +68,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         }
         await repo.signup(
             displayName: name, email: email, password: password);
+        if (mounted) {
+          context.push('/onboarding');
+        }
       }
       ref.invalidate(authStatusProvider);
       ref.invalidate(subscriptionInfoProvider);

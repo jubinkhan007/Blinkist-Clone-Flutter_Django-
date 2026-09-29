@@ -8,6 +8,8 @@ import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
 import '../../notifications/data/notification_repository.dart';
 import '../../notifications/domain/notification_models.dart';
+import '../../onboarding/data/onboarding_repository.dart';
+import '../../onboarding/domain/onboarding_models.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -192,6 +194,8 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   const _ReadingHabitsAndStatsCard(),
+                  const SizedBox(height: 16),
+                  const _LearningGoalsCard(),
                   const SizedBox(height: 16),
                   Card(
                     elevation: 0,
@@ -908,5 +912,111 @@ class _NotificationSettingsCard extends ConsumerWidget {
     }
   }
 }
+
+class _LearningGoalsCard extends ConsumerWidget {
+  const _LearningGoalsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.watch(onboardingRepositoryProvider);
+    final goalKey = repo.getSavedReadingGoal();
+    final formatKey = repo.getSavedPreferredFormat();
+    final topics = repo.getSavedInterestTopics();
+
+    final goalOption = kReadingGoalOptions.firstWhere(
+      (g) => g.id == goalKey,
+      orElse: () => kReadingGoalOptions.first,
+    );
+
+    final formatLabel = formatKey == 'audio'
+        ? '🎧 Listening'
+        : (formatKey == 'text' ? '📖 Reading' : '⚡ Both text & audio');
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Text('🎯', style: TextStyle(fontSize: 20)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Learning Goals & Interests',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                TextButton(
+                  onPressed: () => context.push('/onboarding'),
+                  child: const Text('Adjust'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _KeyValue(
+              icon: Icons.track_changes_rounded,
+              label: 'Daily Goal',
+              value: '${goalOption.emoji} ${goalOption.title}',
+            ),
+            const SizedBox(height: 10),
+            _KeyValue(
+              icon: Icons.auto_stories_outlined,
+              label: 'Preferred Format',
+              value: formatLabel,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Selected Topics',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: (topics.isNotEmpty ? topics : ['productivity', 'psychology']).map((t) {
+                final display = t.replaceAll('-', ' ').replaceAll('_', ' ');
+                final capitalized = display.isEmpty
+                    ? t
+                    : '${display[0].toUpperCase()}${display.substring(1)}';
+
+                return Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  label: Text(
+                    capitalized,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 

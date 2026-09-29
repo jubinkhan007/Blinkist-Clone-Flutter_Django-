@@ -127,3 +127,91 @@ class UserStreakTests(APITestCase):
         self.assertEqual(response.data['longest_streak'], 1)
         self.assertEqual(response.data['last_active_date'], str(today))
 
+
+class UserOnboardingTests(APITestCase):
+    def setUp(self):
+        from apps.catalog.models import Category, Book, Author
+
+        self.user = User.objects.create_user(
+            email='newbie@example.com',
+            username='newbie',
+            password='secret123',
+        )
+        self.client.force_authenticate(self.user)
+
+        self.author = Author.objects.create(name='James Clear')
+        self.cat_prod, _ = Category.objects.get_or_create(
+            slug='personal-development',
+            defaults={'name': 'Personal Development'},
+        )
+        self.cat_science, _ = Category.objects.get_or_create(
+            slug='science',
+            defaults={'name': 'Science'},
+        )
+        self.book1 = Book.objects.create(
+            title='Atomic Habits',
+            slug='atomic-habits',
+            author=self.author,
+            description='Habit formation book',
+        )
+        self.book1.categories.add(self.cat_prod)
+
+        self.book2 = Book.objects.create(
+            title='Cosmos',
+            slug='cosmos',
+            author=self.author,
+            description='Astrophysics book',
+        )
+        self.book2.categories.add(self.cat_science)
+
+    def test_get_onboarding_topics(self):
+        response = self.client.get(reverse('onboarding_topics'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('topics', response.data)
+        self.assertTrue(len(response.data['topics']) >= 4)
+        topic_ids = [t['id'] for t in response.data['topics']]
+        self.assertIn('productivity', topic_ids)
+        self.assertIn('psychology', topic_ids)
+
+    def test_post_onboarding_submission(self):
+        payload = {
+            'reading_goal': 'daily_15',
+            'preferred_format': 'audio',
+            'interest_topics': ['personal-development', 'psychology'],
+        }
+        response = self.client.post(reverse('onboarding_submit'), payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['has_completed_onboarding'])
+        self.assertEqual(response.data['reading_goal'], 'daily_15')
+        self.assertEqual(response.data['preferred_format'], 'audio')
+        self.assertEqual(response.data['interest_topics'], ['personal-development', 'psychology'])
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.has_completed_onboarding)
+        self.assertEqual(self.user.reading_goal, 'daily_15')
+        self.assertEqual(self.user.preferred_format, 'audio')
+        self.assertIn(self.cat_prod, self.user.interest_categories.all())
+
+    def test_onboarding_unauthenticated_forbidden(self):
+        self.client.logout()
+        response = self.client.post(reverse('onboarding_submit'), {'reading_goal': 'casual'})
+        self.assertEqual(response.status_code, 401)
+
+    def test_home_feed_personalized_recommendation_from_interests(self):
+        # User submits interest in science
+        payload = {
+            'reading_goal': 'career',
+            'preferred_format': 'both',
+            'interest_topics': ['science'],
+        }
+        self.client.post(reverse('onboarding_submit'), payload, format='json')
+
+        # Check Home Feed
+        from apps.home.services import get_home_feed_for_user
+        feed = get_home_feed_for_user(self.user)
+        recommended_books = list(feed['recommended'])
+        self.assertTrue(len(recommended_books) > 0)
+        # book2 (Cosmos, in Science) should be in recommended!
+        self.assertIn(self.book2, recommended_books)
+
+
