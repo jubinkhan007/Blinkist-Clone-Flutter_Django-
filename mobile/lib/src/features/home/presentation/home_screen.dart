@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
 import '../../explore/domain/catalog_models.dart';
+import '../../notifications/data/notification_repository.dart';
 import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
 import '../domain/home_models.dart';
@@ -21,6 +22,7 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('For You'),
         actions: [
           const _StreakBadge(),
+          const _NotificationBellButton(),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () =>
@@ -498,6 +500,26 @@ class _DailyPickHero extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NotificationBellButton extends ConsumerWidget {
+  const _NotificationBellButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCountAsync = ref.watch(unreadNotificationCountProvider);
+    final count = unreadCountAsync.valueOrNull ?? 0;
+
+    return IconButton(
+      tooltip: 'Notifications',
+      onPressed: () => context.push('/notifications'),
+      icon: Badge(
+        isLabelVisible: count > 0,
+        label: Text(count > 99 ? '99+' : '$count'),
+        child: const Icon(Icons.notifications_outlined),
       ),
     );
   }

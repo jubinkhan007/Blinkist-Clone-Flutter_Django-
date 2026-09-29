@@ -6,6 +6,8 @@ import '../../../../core/subscription/subscription_repository.dart';
 import '../../auth/presentation/auth_screen.dart';
 import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
+import '../../notifications/data/notification_repository.dart';
+import '../../notifications/domain/notification_models.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -296,6 +298,8 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  const _NotificationSettingsCard(),
                   const SizedBox(height: 16),
                   Card(
                     elevation: 0,
@@ -738,4 +742,171 @@ class _MetricTile extends StatelessWidget {
     );
   }
 }
+
+class _NotificationSettingsCard extends ConsumerWidget {
+  const _NotificationSettingsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefsAsync = ref.watch(notificationPreferencesProvider);
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.notifications_active_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Notifications & Reminders',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            prefsAsync.when(
+              data: (prefs) => Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Daily Blink Reminder'),
+                    subtitle: const Text(
+                      'Get notified when today\'s free Blink of the Day is ready',
+                    ),
+                    value: prefs.dailyPickEnabled,
+                    onChanged: (val) async {
+                      try {
+                        await ref
+                            .read(notificationRepositoryProvider)
+                            .updatePreferences(dailyPickEnabled: val);
+                        ref.invalidate(notificationPreferencesProvider);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to update: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('Streak Protection Alert'),
+                    subtitle: const Text(
+                      'Get an evening reminder to protect your active reading streak',
+                    ),
+                    value: prefs.streakReminderEnabled,
+                    onChanged: (val) async {
+                      try {
+                        await ref
+                            .read(notificationRepositoryProvider)
+                            .updatePreferences(streakReminderEnabled: val);
+                        ref.invalidate(notificationPreferencesProvider);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to update: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.schedule_outlined),
+                    title: const Text('Preferred Reminder Time'),
+                    subtitle: Text(_formatTime(prefs.reminderTime)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final currentParts = prefs.reminderTime.split(':');
+                      final initialHour = currentParts.isNotEmpty
+                          ? int.tryParse(currentParts[0]) ?? 8
+                          : 8;
+                      final initialMinute = currentParts.length > 1
+                          ? int.tryParse(currentParts[1]) ?? 30
+                          : 30;
+
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay(
+                          hour: initialHour,
+                          minute: initialMinute,
+                        ),
+                      );
+
+                      if (picked != null && context.mounted) {
+                        final formatted =
+                            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}:00';
+                        try {
+                          await ref
+                              .read(notificationRepositoryProvider)
+                              .updatePreferences(reminderTime: formatted);
+                          ref.invalidate(notificationPreferencesProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Reminder time updated!'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to update: $e')),
+                            );
+                          }
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (err, _) => Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Unable to load preferences: $err'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(String rawTime) {
+    try {
+      final parts = rawTime.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final h = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+      final m = minute.toString().padLeft(2, '0');
+      return '$h:$m $period';
+    } catch (_) {
+      return rawTime;
+    }
+  }
+}
+
 
