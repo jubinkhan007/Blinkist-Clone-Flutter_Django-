@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
+import '../../catalog/domain/collection_models.dart';
 import '../../explore/domain/catalog_models.dart';
+
 import '../../notifications/data/notification_repository.dart';
 import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
@@ -63,9 +65,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _DailyPickHero(book: feed.dailyPick!),
               if (feed.continueReading.isNotEmpty)
                 _ContinueReadingRail(items: feed.continueReading),
+              if (feed.collections.isNotEmpty)
+                _CollectionsRail(collections: feed.collections),
               _buildRail(context, 'Featured', feed.featured),
               _buildRail(context, 'Recommended', feed.recommended),
               _buildRail(context, 'Recently Added', feed.recentlyAdded),
+
             ],
           ),
         ),
@@ -767,4 +772,278 @@ class _StreakCelebrationSheet extends StatelessWidget {
     );
   }
 }
+
+class _CollectionsRail extends StatelessWidget {
+  final List<CollectionOverview> collections;
+
+  const _CollectionsRail({required this.collections});
+
+  @override
+  Widget build(BuildContext context) {
+    if (collections.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                'Curated Learning Paths',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Curated',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 195,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: collections.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, index) {
+              return _CollectionCard(collection: collections[index]);
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _CollectionCard extends StatelessWidget {
+  final CollectionOverview collection;
+
+  const _CollectionCard({required this.collection});
+
+  Color _parseColor(String? hex, {Color fallback = const Color(0xFF0284C7)}) {
+    if (hex == null || hex.isEmpty) return fallback;
+    final clean = hex.replaceAll('#', '');
+    if (clean.length == 6) {
+      final val = int.tryParse('FF$clean', radix: 16);
+      if (val != null) return Color(val);
+    } else if (clean.length == 8) {
+      final val = int.tryParse(clean, radix: 16);
+      if (val != null) return Color(val);
+    }
+    return fallback;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = _parseColor(collection.colorHex);
+
+    return GestureDetector(
+      onTap: () => context.push('/collections/${collection.slug}'),
+      child: Container(
+        width: 290,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            colors: [
+              accentColor,
+              Color.lerp(accentColor, Colors.black, 0.45)!,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withOpacity(0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Top badges
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bolt_rounded, size: 12, color: Colors.amberAccent),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${collection.targetDurationDays}-day plan',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${collection.booksCount} books',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Title & Subtitle
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  collection.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (collection.subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    collection.subtitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+
+            // Bottom row: Book covers collage + Arrow
+            Row(
+              children: [
+                // Overlapping book preview covers
+                if (collection.previewBooks.isNotEmpty)
+                  SizedBox(
+                    height: 44,
+                    width: 28.0 + (collection.previewBooks.length - 1) * 20.0,
+                    child: Stack(
+                      children: List.generate(
+                        collection.previewBooks.length,
+                        (i) {
+                          final pBook = collection.previewBooks[i];
+                          return Positioned(
+                            left: i * 20.0,
+                            child: Container(
+                              width: 30,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.white, width: 1.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: pBook.coverImageUrl != null
+                                    ? Image.network(
+                                        resolveServerUrl(pBook.coverImageUrl!),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          color: Colors.grey.shade800,
+                                          child: const Icon(Icons.book, size: 14, color: Colors.white),
+                                        ),
+                                      )
+                                    : Container(
+                                        color: Colors.grey.shade800,
+                                        child: const Icon(Icons.book, size: 14, color: Colors.white),
+                                      ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+
+                const Spacer(),
+
+                // Explore CTA
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Start',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 14),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 

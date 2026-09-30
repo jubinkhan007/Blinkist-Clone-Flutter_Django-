@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.catalog.models import Author, Book, Category, UserLibraryItem
+from apps.catalog.models import Author, Book, Category, UserLibraryItem, Collection, CollectionItem
 from apps.summaries.models import SummarySection
 
 
@@ -139,3 +139,90 @@ class DailyPickTests(APITestCase):
         finally:
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
+
+
+class CollectionApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='col_reader@example.com',
+            username='col_reader',
+            password='pass12345',
+        )
+        self.author = Author.objects.create(name='Productivity Guru')
+        self.book1 = Book.objects.create(
+            title='Deep Work Mastery',
+            slug='deep-work-mastery',
+            author=self.author,
+            estimated_read_time_minutes=15,
+        )
+        self.book2 = Book.objects.create(
+            title='Atomic Habits Essentials',
+            slug='atomic-habits-essentials',
+            author=self.author,
+            estimated_read_time_minutes=12,
+        )
+        self.collection = Collection.objects.create(
+            title='7 Days to Peak Productivity',
+            subtitle='Transform your daily output',
+            slug='7-days-peak-productivity',
+            description='A curated curriculum to master focus.',
+            target_duration_days=7,
+            is_featured=True,
+            order=1,
+        )
+        self.item1 = CollectionItem.objects.create(
+            collection=self.collection,
+            book=self.book1,
+            order=1,
+            note='Day 1: Eliminate distraction',
+        )
+        self.item2 = CollectionItem.objects.create(
+            collection=self.collection,
+            book=self.book2,
+            order=2,
+            note='Day 2: Build unbreakable habits',
+        )
+
+    def test_collection_list_api(self):
+        url = reverse('collection_list')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(response.data), 1)
+        col = response.data[0]
+        self.assertEqual(col['title'], '7 Days to Peak Productivity')
+        self.assertEqual(col['books_count'], 2)
+        self.assertEqual(col['total_estimated_minutes'], 27)
+
+    def test_collection_detail_and_progress_tracking(self):
+        url = reverse('collection_detail', kwargs={'slug': self.collection.slug})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['title'], '7 Days to Peak Productivity')
+        self.assertEqual(len(response.data['items']), 2)
+        self.assertEqual(response.data['completed_books_count'], 0)
+        self.assertEqual(response.data['progress_percent'], 0.0)
+
+        # Authenticate and mark book 1 as finished
+        self.client.force_authenticate(self.user)
+        from apps.progress.models import UserBookProgress
+        UserBookProgress.objects.create(
+            user=self.user,
+            book=self.book1,
+            is_completed=True,
+        )
+
+
+        auth_response = self.client.get(url)
+        self.assertEqual(auth_response.status_code, 200)
+        self.assertEqual(auth_response.data['completed_books_count'], 1)
+        self.assertEqual(auth_response.data['progress_percent'], 50.0)
+        self.assertTrue(auth_response.data['items'][0]['is_completed'])
+        self.assertFalse(auth_response.data['items'][1]['is_completed'])
+
+    def test_home_feed_includes_collections(self):
+        home_url = reverse('home_merchandising')
+        response = self.client.get(home_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('collections', response.data)
+        self.assertGreaterEqual(len(response.data['collections']), 1)
+

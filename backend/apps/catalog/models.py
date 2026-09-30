@@ -105,3 +105,47 @@ class DailyPick(models.Model):
 
     def __str__(self):
         return f"{self.date}: {self.book.title}"
+
+
+class Collection(models.Model):
+    title = models.CharField(max_length=255)
+    subtitle = models.CharField(max_length=255, blank=True)
+    slug = models.SlugField(max_length=255, unique=True)
+    description = models.TextField(blank=True)
+    banner_image = models.ImageField(upload_to='collections/banners/', blank=True, null=True)
+    icon = models.CharField(max_length=50, blank=True, default='auto_stories')
+    color_hex = models.CharField(max_length=7, blank=True, default='#1E3A8A')
+    target_duration_days = models.PositiveIntegerField(default=7, help_text="e.g. 7 for a 7-day challenge")
+    is_featured = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', '-created_at']
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def books_count(self) -> int:
+        return self.items.count()
+
+    @property
+    def total_estimated_minutes(self) -> int:
+        return sum(item.book.estimated_read_time_minutes for item in self.items.select_related('book'))
+
+
+class CollectionItem(models.Model):
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='items')
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='collection_items')
+    order = models.PositiveIntegerField(default=0)
+    note = models.CharField(max_length=255, blank=True, help_text="e.g. 'Day 1: Build the mindset'")
+
+    class Meta:
+        unique_together = ('collection', 'book')
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.collection.title} - #{self.order}: {self.book.title}"
+

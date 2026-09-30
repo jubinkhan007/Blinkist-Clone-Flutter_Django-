@@ -10,7 +10,7 @@ from django.urls import path
 
 from apps.summaries.models import SummarySection
 
-from .models import Author, Book, Category, ContentIngestionJob, DailyPick
+from .models import Author, Book, Category, ContentIngestionJob, DailyPick, Collection, CollectionItem
 
 
 class SummarySectionInline(admin.StackedInline):
@@ -228,3 +228,21 @@ class BookAdmin(admin.ModelAdmin):
     @admin.display(description='Sections')
     def section_count(self, obj):
         return obj.sections.count()
+
+
+class CollectionItemInline(admin.TabularInline):
+    model = CollectionItem
+    extra = 1
+    raw_id_fields = ('book',)
+    fields = ('order', 'book', 'note')
+    ordering = ('order',)
+
+
+@admin.register(Collection)
+class CollectionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'slug', 'books_count', 'target_duration_days', 'is_featured', 'order', 'created_at')
+    list_filter = ('is_featured',)
+    search_fields = ('title', 'subtitle', 'description')
+    prepopulated_fields = {'slug': ('title',)}
+    inlines = [CollectionItemInline]
+

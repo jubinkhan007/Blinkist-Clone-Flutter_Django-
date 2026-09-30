@@ -5,8 +5,10 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/networking/api_client.dart';
+import '../../catalog/domain/collection_models.dart';
 import '../../home/domain/home_models.dart';
 import '../domain/book_models.dart';
+
 
 part 'content_repository.g.dart';
 
@@ -46,6 +48,19 @@ class ContentRepository {
         .map((item) => SummarySection.fromJson(item as Map<String, dynamic>))
         .toList();
   }
+
+  Future<List<CollectionOverview>> getCollections() async {
+    final response = await _dio.get('/catalog/collections/');
+    final data = response.data as List<dynamic>;
+    return data
+        .map((item) => CollectionOverview.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CollectionDetail> getCollectionDetail(String slug) async {
+    final response = await _dio.get('/catalog/collections/$slug/');
+    return CollectionDetail.fromJson(response.data as Map<String, dynamic>);
+  }
 }
 
 @riverpod
@@ -68,3 +83,13 @@ final summarySectionsProvider =
     FutureProvider.family<List<SummarySection>, String>((ref, slug) {
       return ref.watch(contentRepositoryProvider).getSummarySections(slug);
     });
+
+final collectionsProvider = FutureProvider<List<CollectionOverview>>((ref) {
+  return ref.watch(contentRepositoryProvider).getCollections();
+});
+
+final collectionDetailProvider =
+    FutureProvider.family<CollectionDetail, String>((ref, slug) {
+  return ref.watch(contentRepositoryProvider).getCollectionDetail(slug);
+});
+

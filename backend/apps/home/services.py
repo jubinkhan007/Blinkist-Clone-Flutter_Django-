@@ -3,7 +3,7 @@ from collections import Counter
 from django.core.cache import cache
 from django.db.models import Count, QuerySet
 
-from apps.catalog.models import Book
+from apps.catalog.models import Book, Collection
 from apps.catalog.daily_pick import get_or_create_daily_pick
 from apps.progress.models import UserAudioProgress, UserSummaryProgress
 from apps.catalog.recommendation_service import query_similar_books, get_book_embedding
@@ -94,6 +94,12 @@ def get_home_feed_for_user(user):
     daily_pick_obj = get_or_create_daily_pick()
     daily_pick_book = daily_pick_obj.book if daily_pick_obj else None
 
+    collections = (
+        Collection.objects.filter(is_featured=True)
+        .prefetch_related('items__book__author', 'items__book__categories')
+        .order_by('order', '-created_at')[:8]
+    )
+
     if user is None or not getattr(user, 'is_authenticated', False):
         return {
             'daily_pick': daily_pick_book,
@@ -101,12 +107,14 @@ def get_home_feed_for_user(user):
             'recently_added': Book.objects.order_by('-created_at')[:10],
             'recommended': Book.objects.order_by('-created_at')[:10],
             'continue_reading': [],
+            'collections': collections,
         }
 
     cache_key = f'home_feed_{user.id}'
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
+
 
     continue_reading = build_continue_reading_for_user(user)
     continue_book_ids = [item['id'] for item in continue_reading]
@@ -179,12 +187,20 @@ def get_home_feed_for_user(user):
     if not recommended:
         recommended = Book.objects.order_by('-created_at')[:10]
 
+    collections = (
+        Collection.objects.filter(is_featured=True)
+        .prefetch_related('items__book__author', 'items__book__categories')
+        .order_by('order', '-created_at')[:8]
+    )
+
     payload = {
         'daily_pick': daily_pick_book,
         'featured': featured,
         'recently_added': recently_added,
         'recommended': recommended,
         'continue_reading': continue_reading,
+        'collections': collections,
     }
     cache.set(cache_key, payload, HOME_FEED_CACHE_TTL_SECONDS)
     return payload
+

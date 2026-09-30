@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.catalog.models import Author, Book, Category
+from apps.catalog.models import Author, Book, Category, Collection, CollectionItem
 from apps.summaries.models import SummarySection
 
 def _user_has_premium_access(request) -> bool:
@@ -138,3 +138,115 @@ class BookDetailSerializer(BookListSerializer):
                 return request.build_absolute_uri(obj.full_book_pdf.url)
             return obj.full_book_pdf.url
         return None
+
+
+def _is_book_completed_for_user(user, book) -> bool:
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    from apps.progress.models import UserBookProgress, UserAudioProgress, UserSummaryProgress
+    if UserBookProgress.objects.filter(user=user, book=book, is_completed=True).exists():
+        return True
+    if UserAudioProgress.objects.filter(user=user, book=book, is_finished=True).exists():
+        return True
+    summary_prog = UserSummaryProgress.objects.filter(user=user, book=book).first()
+    if summary_prog:
+        total_sec = book.sections.count()
+        if total_sec > 0 and summary_prog.completed_sections_count >= total_sec:
+            return True
+        elif total_sec == 0 and summary_prog.completed_sections_count > 0:
+            return True
+    return False
+
+
+class CollectionItemSerializer(serializers.ModelSerializer):
+    book = BookListSerializer(read_only=True)
+    is_completed = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CollectionItem
+        fields = ('id', 'order', 'note', 'book', 'is_completed')
+
+    def get_is_completed(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return _is_book_completed_for_user(user, obj.book)
+
+
+
+class CollectionListSerializer(serializers.ModelSerializer):
+    banner_image_url = serializers.SerializerMethodField()
+    books_count = serializers.IntegerField(read_only=True)
+    total_estimated_minutes = serializers.IntegerField(read_only=True)
+    preview_books = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Collection
+        fields = (
+            'id', 'title', 'subtitle', 'slug', 'description',
+            'banner_image_url', 'icon', 'color_hex', 'target_duration_days',
+            'is_featured', 'books_count', 'total_estimated_minutes', 'preview_books'
+        )
+
+    def get_banner_image_url(self, obj):
+        if obj.banner_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.banner_image.url)
+            return obj.banner_image.url
+        return None
+
+    def get_preview_books(self, obj):
+        request = self.context.get('request')
+        covers = []
+        for item in obj.items.select_related('book')[:4]:
+            url = None
+            if item.book.cover_image:
+                url = request.build_absolute_uri(item.book.cover_image.url) if request else item.book.cover_image.url
+            covers.append({
+                'id': item.book.id,
+                'title': item.book.title,
+                'cover_image_url': url,
+            })
+        return covers
+
+
+class CollectionDetailSerializer(serializers.ModelSerializer):
+    banner_image_url = serializers.SerializerMethodField()
+    books_count = serializers.IntegerField(read_only=True)
+    total_estimated_minutes = serializers.IntegerField(read_only=True)
+    items = CollectionItemSerializer(many=True, read_only=True)
+    completed_books_count = serializers.SerializerMethodField()
+    progress_percent = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Collection
+        fields = (
+            'id', 'title', 'subtitle', 'slug', 'description',
+            'banner_image_url', 'icon', 'color_hex', 'target_duration_days',
+            'books_count', 'total_estimated_minutes', 'completed_books_count',
+            'progress_percent', 'items'
+        )
+
+    def get_banner_image_url(self, obj):
+        if obj.banner_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.banner_image.url)
+            return obj.banner_image.url
+        return None
+
+    def get_completed_books_count(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not getattr(user, 'is_authenticated', False):
+            return 0
+        return sum(1 for item in obj.items.all() if _is_book_completed_for_user(user, item.book))
+
+
+    def get_progress_percent(self, obj):
+        total = obj.items.count()
+        if total == 0:
+            return 0.0
+        completed = self.get_completed_books_count(obj)
+        return round(min(100.0, (completed / total) * 100.0), 1)
+

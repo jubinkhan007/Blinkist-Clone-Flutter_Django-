@@ -14,6 +14,7 @@ import '../../src/features/subscription/presentation/payment_return_screen.dart'
 import '../../src/features/subscription/presentation/paywall_screen.dart';
 import '../../src/features/notifications/presentation/notifications_screen.dart';
 import '../../src/features/onboarding/presentation/onboarding_screen.dart';
+import '../../src/features/catalog/presentation/collection_detail_screen.dart';
 
 // Keys for nested navigation
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -102,6 +103,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/collections/:slug',
+        builder: (context, state) {
+          final slug = state.pathParameters['slug']!;
+          return CollectionDetailScreen(slug: slug);
+        },
       ),
     ],
   );

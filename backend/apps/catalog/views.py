@@ -1,8 +1,14 @@
 from rest_framework import filters, generics, permissions, views
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from apps.catalog.models import Book, Category, UserLibraryItem
-from apps.catalog.serializers import BookListSerializer, BookDetailSerializer, CategorySerializer
+from apps.catalog.models import Book, Category, UserLibraryItem, Collection
+from apps.catalog.serializers import (
+    BookListSerializer,
+    BookDetailSerializer,
+    CategorySerializer,
+    CollectionListSerializer,
+    CollectionDetailSerializer,
+)
 
 class CategoryListView(generics.ListAPIView):
     queryset = Category.objects.all().order_by('name')
@@ -71,3 +77,34 @@ class UserLibraryToggleView(views.APIView):
 
         library_item.delete()
         return Response({'saved': False})
+
+
+class CollectionListView(generics.ListAPIView):
+    queryset = Collection.objects.filter(is_featured=True).prefetch_related(
+        'items__book__author',
+        'items__book__categories',
+    ).order_by('order', '-created_at')
+    serializer_class = CollectionListSerializer
+    permission_classes = (permissions.AllowAny,)
+    pagination_class = None
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+
+class CollectionDetailView(generics.RetrieveAPIView):
+    queryset = Collection.objects.all().prefetch_related(
+        'items__book__author',
+        'items__book__categories',
+    )
+    serializer_class = CollectionDetailSerializer
+    lookup_field = 'slug'
+    permission_classes = (permissions.AllowAny,)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+

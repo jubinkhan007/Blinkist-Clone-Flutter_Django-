@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.text import slugify
 
-from apps.catalog.models import Author, Book, Category
+from apps.catalog.models import Author, Book, Category, Collection, CollectionItem
 from apps.summaries.models import SummarySection
 
 User = get_user_model()
@@ -126,9 +126,66 @@ class Command(BaseCommand):
         demo_user.set_password('DemoPass123!')
         demo_user.save()
 
+        # Seed Curated Collections
+        col1, _ = Collection.objects.get_or_create(
+            slug='7-days-to-peak-productivity',
+            defaults={
+                'title': '7 Days to Peak Productivity',
+                'subtitle': 'Build unbreakable habits, eliminate distraction, and focus deeply.',
+                'description': 'A masterclass curriculum designed to transform your daily output. Tackle one high-impact summary per day for one week.',
+                'icon': 'bolt',
+                'color_hex': '#0284C7',
+                'target_duration_days': 7,
+                'is_featured': True,
+                'order': 1,
+            },
+        )
+        col1_books = [
+            ('Atomic Habits', 'Day 1: Design tiny systems that compound into massive results.'),
+            ('Deep Work', 'Day 2: Protect 90 minutes of distraction-free focus every morning.'),
+            ('Essentialism', 'Day 3: Ruthlessly eliminate non-essential commitments.'),
+            ('The Power of Habit', 'Day 4: Decode your daily cues, routines, and reward loops.'),
+        ]
+        for idx, (title, note) in enumerate(col1_books, start=1):
+            b = Book.objects.filter(title=title).first()
+            if b:
+                CollectionItem.objects.get_or_create(
+                    collection=col1,
+                    book=b,
+                    defaults={'order': idx, 'note': note},
+                )
+
+        col2, _ = Collection.objects.get_or_create(
+            slug='mental-models-for-leaders',
+            defaults={
+                'title': 'Mental Models for Leaders',
+                'subtitle': 'Sharpen your decision-making and cognitive frameworks.',
+                'description': 'How world-class thinkers and founders navigate uncertainty, cognitive biases, and rapid change.',
+                'icon': 'psychology',
+                'color_hex': '#7C3AED',
+                'target_duration_days': 5,
+                'is_featured': True,
+                'order': 2,
+            },
+        )
+        col2_books = [
+            ('Thinking, Fast and Slow', 'Day 1: Recognize System 1 biases and slow down critical decisions.'),
+            ('Mindset', 'Day 2: Cultivate growth-oriented persistence across your team.'),
+            ('The Lean Startup', 'Day 3: Validate hypotheses through rapid build-measure-learn cycles.'),
+        ]
+        for idx, (title, note) in enumerate(col2_books, start=1):
+            b = Book.objects.filter(title=title).first()
+            if b:
+                CollectionItem.objects.get_or_create(
+                    collection=col2,
+                    book=b,
+                    defaults={'order': idx, 'note': note},
+                )
+
         self.stdout.write(
             self.style.SUCCESS(
                 f'Seeded demo data with {len(CATEGORY_FIXTURES)} categories, '
-                f'{len(authors)} authors, {len(BOOK_FIXTURES)} books, and demo user {demo_user.email}.'
+                f'{len(authors)} authors, {len(BOOK_FIXTURES)} books, 2 curated collections, and demo user {demo_user.email}.'
             )
         )
+

@@ -1,4 +1,6 @@
 import '../../explore/domain/catalog_models.dart';
+import '../../catalog/domain/collection_models.dart';
+
 
 class ContinueReadingBook extends Book {
   final double percentComplete;
@@ -53,6 +55,7 @@ class HomeMerchandising {
   final List<Book> recentlyAdded;
   final List<Book> recommended;
   final List<ContinueReadingBook> continueReading;
+  final List<CollectionOverview> collections;
 
   HomeMerchandising({
     this.dailyPick,
@@ -60,6 +63,7 @@ class HomeMerchandising {
     required this.recentlyAdded,
     required this.recommended,
     required this.continueReading,
+    this.collections = const [],
   });
 
   factory HomeMerchandising.fromJson(Map<String, dynamic> json) {
@@ -67,18 +71,22 @@ class HomeMerchandising {
       dailyPick: json['daily_pick'] != null
           ? Book.fromJson(json['daily_pick'])
           : null,
-      featured: (json['featured'] as List)
+      featured: (json['featured'] as List? ?? [])
           .map((i) => Book.fromJson(i))
           .toList(),
-      recentlyAdded: (json['recently_added'] as List)
+      recentlyAdded: (json['recently_added'] as List? ?? [])
           .map((i) => Book.fromJson(i))
           .toList(),
-      recommended: (json['recommended'] as List)
+      recommended: (json['recommended'] as List? ?? [])
           .map((i) => Book.fromJson(i))
           .toList(),
       continueReading: (json['continue_reading'] as List? ?? [])
           .map((i) => ContinueReadingBook.fromJson(i))
           .toList(),
+      collections: (json['collections'] as List? ?? [])
+          .map((i) => CollectionOverview.fromJson(i as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
+
