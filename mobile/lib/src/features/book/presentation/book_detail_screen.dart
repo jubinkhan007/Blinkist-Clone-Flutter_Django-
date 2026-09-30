@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -166,7 +168,20 @@ class BookDetailScreen extends ConsumerWidget {
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: resolvedCoverUrl != null
-                      ? Image.network(resolvedCoverUrl, fit: BoxFit.cover)
+                      ? (resolvedCoverUrl.startsWith('file://')
+                          ? Image.file(
+                              File(Uri.parse(resolvedCoverUrl).toFilePath()),
+                              fit: BoxFit.cover,
+                            )
+                          : Image.network(
+                              resolvedCoverUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                              ),
+                            ))
                       : Container(
                           color: Theme.of(
                             context,
@@ -273,38 +288,7 @@ class BookDetailScreen extends ConsumerWidget {
                       ),
                       if (!isLocked) ...[
                         const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            if (downloadTask == null)
-                              TextButton.icon(
-                                onPressed: () {
-                                  ref
-                                      .read(offlineDownloadsProvider.notifier)
-                                      .startDownload(book);
-                                },
-                                icon: const Icon(Icons.download),
-                                label: const Text('Download for offline'),
-                              )
-                            else if (downloadTask.isCompleted)
-                              const Chip(
-                                avatar: Icon(Icons.check_circle, size: 16),
-                                label: Text('Available Offline'),
-                              )
-                            else
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Downloading...'),
-                                    const SizedBox(height: 4),
-                                    LinearProgressIndicator(
-                                      value: downloadTask.progress,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
+                        _DownloadStatusWidget(book: book, task: downloadTask),
                       ],
                       const SizedBox(height: 32),
                       Text(
@@ -371,6 +355,282 @@ Future<void> _toggleSaved(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Could not update saved books: $error')),
+    );
+  }
+}
+
+class _DownloadStatusWidget extends ConsumerWidget {
+  final BookDetail book;
+  final DownloadTask? task;
+
+  const _DownloadStatusWidget({
+    required this.book,
+    required this.task,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final notifier = ref.read(offlineDownloadsProvider.notifier);
+
+    // 1. Idle / Not downloaded yet
+    if (task == null || task!.status == DownloadStatus.idle) {
+      final audioCount = book.sections.where((s) => s.audioUrl != null && s.audioUrl!.isNotEmpty).length;
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.cloud_download_outlined, color: colorScheme.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Available for Offline',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    audioCount > 0 ? 'Full summary + audio ($audioCount chapters)' : 'Full summary text',
+                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: () => notifier.startDownload(book),
+              icon: const Icon(Icons.download, size: 16),
+              label: const Text('Download'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. Downloading in progress
+    if (task!.status == DownloadStatus.downloading) {
+      final percentInt = (task!.progress * 100).toInt();
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.primary.withOpacity(0.3)),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    value: task!.progress > 0 ? task!.progress : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    task!.statusMessage ?? 'Downloading offline content...',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  '$percentInt%',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Cancel Download',
+                  icon: const Icon(Icons.close, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => notifier.cancelDownload(book.slug),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: task!.progress,
+                minHeight: 6,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Failed / Error state
+    if (task!.status == DownloadStatus.failed) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: colorScheme.errorContainer.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.error.withOpacity(0.4)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: colorScheme.error, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Download Failed',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    task!.error ?? 'Connection interrupted',
+                    style: TextStyle(fontSize: 11, color: colorScheme.error.withOpacity(0.8)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => notifier.startDownload(book),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 4. Completed / Available offline
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B5E20).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2E7D32).withOpacity(0.3)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+              color: Color(0xFF2E7D32),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Downloaded for Offline',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF1B5E20),
+                  ),
+                ),
+                Text(
+                  'Saved to device • ${task!.formattedSize}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Download Options',
+            icon: Icon(Icons.more_vert, size: 18, color: colorScheme.onSurfaceVariant),
+            onSelected: (value) async {
+              if (value == 'delete') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Remove Download?'),
+                    content: Text('Remove offline files for "${book.title}" to free ${task!.formattedSize} of storage?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await notifier.removeDownload(book.slug);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Removed ${book.title} from offline storage')),
+                    );
+                  }
+                }
+              } else if (value == 'redownload') {
+                await notifier.removeDownload(book.slug);
+                await notifier.startDownload(book);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'redownload',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, size: 18),
+                    SizedBox(width: 8),
+                    Text('Re-download'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Delete Download', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

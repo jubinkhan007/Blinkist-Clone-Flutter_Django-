@@ -23,30 +23,67 @@ class ContentRepository {
   }
 
   Future<BookDetail> getBookDetail(String slug) async {
-    // 1. Check local storage first (Offline Mode)
-    final appDir = await getApplicationDocumentsDirectory();
-    final localFile = File('${appDir.path}/downloads/$slug/book.json');
-    if (await localFile.exists()) {
-      try {
+    // 1. Check local storage first (Instant offline access)
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final localFile = File('${appDir.path}/downloads/$slug/book.json');
+      if (await localFile.exists()) {
         final content = await localFile.readAsString();
-        final json = jsonDecode(content);
-        return BookDetail.fromJson(json);
-      } catch (_) {
-        // Fallback to network if local read fails
+        return BookDetail.fromJson(jsonDecode(content));
       }
-    }
+    } catch (_) {}
 
     // 2. Fetch from Network
-    final response = await _dio.get('/catalog/books/$slug/');
-    return BookDetail.fromJson(response.data);
+    try {
+      final response = await _dio.get('/catalog/books/$slug/');
+      return BookDetail.fromJson(response.data);
+    } catch (e) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final localFile = File('${appDir.path}/downloads/$slug/book.json');
+      if (await localFile.exists()) {
+        final content = await localFile.readAsString();
+        return BookDetail.fromJson(jsonDecode(content));
+      }
+      rethrow;
+    }
   }
 
   Future<List<SummarySection>> getSummarySections(String slug) async {
-    final response = await _dio.get('/summaries/$slug/');
-    final data = response.data as List<dynamic>;
-    return data
-        .map((item) => SummarySection.fromJson(item as Map<String, dynamic>))
-        .toList();
+    // 1. Check local storage first (Offline reading & listening)
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final localFile = File('${appDir.path}/downloads/$slug/book.json');
+      if (await localFile.exists()) {
+        final content = await localFile.readAsString();
+        final data = jsonDecode(content) as Map<String, dynamic>;
+        final book = BookDetail.fromJson(data);
+        if (book.sections.isNotEmpty) {
+          return book.sections;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fetch from Network
+    try {
+      final response = await _dio.get('/summaries/$slug/');
+      final data = response.data as List<dynamic>;
+      return data
+          .map((item) => SummarySection.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      // 3. Fallback to local storage on network error
+      final appDir = await getApplicationDocumentsDirectory();
+      final localFile = File('${appDir.path}/downloads/$slug/book.json');
+      if (await localFile.exists()) {
+        final content = await localFile.readAsString();
+        final data = jsonDecode(content) as Map<String, dynamic>;
+        final book = BookDetail.fromJson(data);
+        if (book.sections.isNotEmpty) {
+          return book.sections;
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<List<CollectionOverview>> getCollections() async {

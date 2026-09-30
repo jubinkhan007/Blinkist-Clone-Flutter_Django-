@@ -609,7 +609,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                           context,
                                           quoteText: selectedText,
                                           bookTitle: book.title,
-                                          bookAuthor: book.author,
+                                          bookAuthor: book.author.name,
                                         );
                                       },
                                     ),
