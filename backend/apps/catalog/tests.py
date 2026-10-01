@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
 from django.urls import reverse
@@ -346,5 +347,132 @@ class BookFilterAndSortApiTests(APITestCase):
         results = response.data['results']
         # book2 has 1 bookmark, so should appear before book1 and book3
         self.assertEqual(results[0]['slug'], 'habits-master')
+
+
+class BookAskAiApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='reader@example.com',
+            username='reader',
+            password='password123',
+        )
+        self.author = Author.objects.create(name='James Clear', bio='Author and speaker.')
+        self.category = Category.objects.create(name='Productivity', slug='productivity')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            subtitle='An Easy & Proven Way to Build Good Habits & Break Bad Ones',
+            slug='atomic-habits',
+            author=self.author,
+            description='A practical guide on how small changes can lead to remarkable results.',
+            what_you_will_learn='Build good habits.\nBreak bad habits.\nMaster the tiny behaviors that lead to remarkable results.',
+            estimated_read_time_minutes=15,
+        )
+        self.book.categories.add(self.category)
+
+        self.section1 = SummarySection.objects.create(
+            book=self.book,
+            slug='the-fundamentals',
+            order=1,
+            title='The Fundamentals: Why Tiny Changes Make a Big Difference',
+            plain_text='Small habits compound over time like interest on money. Getting 1% better every day counts for a lot.',
+            content='<p>Small habits compound over time like interest on money.</p>',
+            duration_seconds=180,
+            estimated_read_minutes=3,
+        )
+        self.section2 = SummarySection.objects.create(
+            book=self.book,
+            slug='make-it-easy',
+            order=2,
+            title='The 3rd Law: Make It Easy',
+            plain_text='Reduce the friction of good behaviors using the Two-Minute Rule. When you start a habit, it should take less than two minutes.',
+            content='<p>Reduce the friction of good behaviors using the Two-Minute Rule.</p>',
+            duration_seconds=240,
+            estimated_read_minutes=4,
+        )
+
+    def test_ask_ai_with_valid_question(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'What is the main premise of Atomic Habits?',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('answer', response.data)
+        self.assertIn('Atomic Habits', response.data['book_title'])
+        self.assertIn('suggested_followups', response.data)
+        self.assertIsInstance(response.data['suggested_followups'], list)
+        self.assertGreater(len(response.data['suggested_followups']), 0)
+
+    def test_ask_ai_with_section_context(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'How does the two-minute rule work?',
+            'section_slug': 'make-it-easy',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['section_title'], 'The 3rd Law: Make It Easy')
+        self.assertIn('answer', response.data)
+
+    def test_ask_ai_action_steps_prompt(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'What actionable steps can I implement tomorrow?',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('1.', response.data['answer'])
+
+    def test_ask_ai_real_world_example_prompt(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'Give me a real-world example of this in action',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(len(response.data['answer']) > 50)
+
+    def test_ask_ai_missing_question(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        response = self.client.post(url, {'question': '   '}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.data)
+
+    def test_ask_ai_nonexistent_book(self):
+        url = reverse('book_ask_ai', kwargs={'slug': 'non-existent-book'})
+        response = self.client.post(url, {'question': 'Hello?'}, format='json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_ask_ai_with_history(self):
+        url = reverse('book_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'Can you expand on that?',
+            'history': [
+                {'role': 'user', 'content': 'What is compounding?'},
+                {'role': 'assistant', 'content': 'Compounding is small gains building over time.'},
+            ],
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('answer', response.data)
+
+    @patch('apps.catalog.ai_service.configure_gemini', return_value=True)
+    @patch('google.generativeai.GenerativeModel')
+    def test_ask_ai_with_gemini_mocked(self, mock_model_class, mock_configure):
+        mock_instance = MagicMock()
+        mock_instance.generate_content.return_value = MagicMock(
+            text="In Atomic Habits, James Clear proves that 1% improvements compound into dramatic results over time.\n\nFOLLOWUP: How do I overcome habit friction?\nFOLLOWUP: What is the 2-minute rule?\nFOLLOWUP: Can you give a practical example?"
+        )
+        mock_model_class.return_value = mock_instance
+
+        from apps.catalog.ai_service import ask_book_ai
+        result = ask_book_ai(
+            book=self.book,
+            question="Tell me about compounding",
+            force_gemini=True,
+        )
+        self.assertIn("1% improvements compound", result['answer'])
+        self.assertEqual(len(result['suggested_followups']), 3)
+        self.assertEqual(result['suggested_followups'][1], "What is the 2-minute rule?")
 
 

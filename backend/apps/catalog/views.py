@@ -1,7 +1,8 @@
 from django.db.models import Count
-from rest_framework import filters, generics, permissions, views
+from rest_framework import filters, generics, permissions, status, views
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from apps.catalog.ai_service import ask_book_ai
 from apps.catalog.models import Book, Category, UserLibraryItem, Collection
 from apps.catalog.serializers import (
     BookListSerializer,
@@ -144,4 +145,33 @@ class CollectionDetailView(generics.RetrieveAPIView):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+
+class BookAskAiView(views.APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request, slug):
+        book = generics.get_object_or_404(
+            Book.objects.prefetch_related('sections', 'author'),
+            slug=slug,
+        )
+        question = request.data.get('question')
+        if not question or not str(question).strip():
+            return Response(
+                {'error': 'Question is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        section_slug = request.data.get('section_slug')
+        history = request.data.get('history')
+        if not isinstance(history, list):
+            history = None
+
+        result = ask_book_ai(
+            book=book,
+            question=str(question).strip(),
+            section_slug=section_slug,
+            history=history,
+        )
+        return Response(result, status=status.HTTP_200_OK)
 

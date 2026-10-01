@@ -184,3 +184,57 @@ class BookDetail extends Book {
     };
   }
 }
+
+class AskAiResponse {
+  final String answer;
+  final String bookTitle;
+  final String? sectionTitle;
+  final List<String> suggestedFollowups;
+
+  AskAiResponse({
+    required this.answer,
+    required this.bookTitle,
+    this.sectionTitle,
+    this.suggestedFollowups = const [],
+  });
+
+  factory AskAiResponse.fromJson(Map<String, dynamic> json) {
+    return AskAiResponse(
+      answer: json['answer'] as String? ?? '',
+      bookTitle: json['book_title'] as String? ?? '',
+      sectionTitle: json['section_title'] as String?,
+      suggestedFollowups: (json['suggested_followups'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'answer': answer,
+      'book_title': bookTitle,
+      'section_title': sectionTitle,
+      'suggested_followups': suggestedFollowups,
+    };
+  }
+}
+
+class AskAiMessage {
+  final String id;
+  final String text;
+  final bool isUser;
+  final DateTime timestamp;
+  final List<String> suggestedFollowups;
+  final String? referencedSection;
+
+  AskAiMessage({
+    required this.id,
+    required this.text,
+    required this.isUser,
+    required this.timestamp,
+    this.suggestedFollowups = const [],
+    this.referencedSection,
+  });
+}
+

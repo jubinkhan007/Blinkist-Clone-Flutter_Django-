@@ -98,6 +98,24 @@ class ContentRepository {
     final response = await _dio.get('/catalog/collections/$slug/');
     return CollectionDetail.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<AskAiResponse> askBookAi({
+    required String slug,
+    required String question,
+    String? sectionSlug,
+    List<Map<String, String>>? history,
+  }) async {
+    final response = await _dio.post(
+      '/catalog/books/$slug/ask/',
+      data: {
+        'question': question,
+        if (sectionSlug != null && sectionSlug.isNotEmpty)
+          'section_slug': sectionSlug,
+        if (history != null && history.isNotEmpty) 'history': history,
+      },
+    );
+    return AskAiResponse.fromJson(response.data as Map<String, dynamic>);
+  }
 }
 
 @riverpod

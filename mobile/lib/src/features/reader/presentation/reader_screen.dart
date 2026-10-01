@@ -5,6 +5,7 @@ import '../../book/data/content_repository.dart';
 import '../../progress/data/progress_repository.dart';
 import '../domain/highlight_models.dart';
 import '../data/highlight_repository.dart';
+import 'ask_book_ai_sheet.dart';
 import 'audio_controller.dart';
 import 'quote_card_dialog.dart';
 import 'reader_options_provider.dart';
@@ -437,6 +438,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           autoPlay: true,
                         )
                       : null,
+                );
+              },
+              orElse: () => const SizedBox.shrink(),
+            ),
+            bookAsync.maybeWhen(
+              data: (book) {
+                final currentSection = (_currentIndex < sections.length)
+                    ? sections[_currentIndex]
+                    : null;
+                return IconButton(
+                  tooltip: 'Ask AI about this book',
+                  icon: const Icon(Icons.auto_awesome),
+                  onPressed: () => AskBookAiSheet.show(
+                    context,
+                    bookSlug: book.slug,
+                    bookTitle: book.title,
+                    authorName: book.author.name,
+                    currentSectionSlug: currentSection?.slug,
+                    currentSectionTitle: currentSection?.title,
+                  ),
                 );
               },
               orElse: () => const SizedBox.shrink(),

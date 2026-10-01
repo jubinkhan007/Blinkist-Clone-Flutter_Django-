@@ -8,6 +8,7 @@ import '../../../../core/subscription/subscription_repository.dart';
 import '../../explore/domain/catalog_models.dart';
 import '../../library/data/library_repository.dart';
 import '../../library/data/offline_downloads_service.dart';
+import '../../reader/presentation/ask_book_ai_sheet.dart';
 import '../data/content_repository.dart';
 import '../domain/book_models.dart';
 
@@ -71,6 +72,18 @@ class _CtaRow extends StatelessWidget {
             onPressed: book.sections.isNotEmpty
                 ? () => context.push('/books/${book.slug}/read')
                 : null,
+          ),
+          const SizedBox(height: 8),
+          // Ask Book AI (Gemini)
+          OutlinedButton.icon(
+            icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+            label: const Text('Ask Book AI (Gemini)'),
+            onPressed: () => AskBookAiSheet.show(
+              context,
+              bookSlug: book.slug,
+              bookTitle: book.title,
+              authorName: book.author.name,
+            ),
           ),
         ],
         const SizedBox(height: 8),
@@ -144,6 +157,16 @@ class BookDetailScreen extends ConsumerWidget {
                 expandedHeight: 300,
                 pinned: true,
                 actions: [
+                  IconButton(
+                    tooltip: 'Ask AI about this book',
+                    icon: const Icon(Icons.auto_awesome),
+                    onPressed: () => AskBookAiSheet.show(
+                      context,
+                      bookSlug: book.slug,
+                      bookTitle: book.title,
+                      authorName: book.author.name,
+                    ),
+                  ),
                   IconButton(
                     tooltip: saved ? 'Remove bookmark' : 'Save book',
                     icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border),
