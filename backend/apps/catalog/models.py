@@ -37,6 +37,8 @@ class Book(models.Model):
     
     estimated_read_time_minutes = models.PositiveIntegerField(default=15)
     is_premium = models.BooleanField(default=False)
+    rating = models.DecimalField(max_digits=3, decimal_places=1, default=4.7)
+    rating_count = models.PositiveIntegerField(default=120)
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)

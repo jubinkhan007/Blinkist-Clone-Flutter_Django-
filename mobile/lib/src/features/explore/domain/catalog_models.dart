@@ -59,6 +59,9 @@ class Book {
   final bool isPremium;
   final bool isSaved;
   final bool isDailyFree;
+  final double rating;
+  final int ratingCount;
+  final bool hasAudio;
 
   Book({
     required this.id,
@@ -72,6 +75,9 @@ class Book {
     required this.isPremium,
     required this.isSaved,
     this.isDailyFree = false,
+    this.rating = 4.7,
+    this.ratingCount = 120,
+    this.hasAudio = false,
   });
 
   factory Book.fromJson(Map<String, dynamic> json) {
@@ -89,6 +95,9 @@ class Book {
       isPremium: json['is_premium'] ?? false,
       isSaved: json['is_saved'] ?? false,
       isDailyFree: json['is_daily_free'] ?? false,
+      rating: (json['rating'] as num?)?.toDouble() ?? 4.7,
+      ratingCount: (json['rating_count'] as num?)?.toInt() ?? 120,
+      hasAudio: json['has_audio'] ?? false,
     );
   }
 }

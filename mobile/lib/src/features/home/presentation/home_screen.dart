@@ -321,6 +321,33 @@ class BookCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                const SizedBox(width: 2),
+                Text(
+                  book.rating.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '• ${book.estimatedReadTimeMinutes}m',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+                if (book.hasAudio) ...[
+                  const Spacer(),
+                  Icon(
+                    Icons.headphones,
+                    size: 13,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),

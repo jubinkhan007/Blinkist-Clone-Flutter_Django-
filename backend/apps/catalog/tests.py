@@ -226,3 +226,125 @@ class CollectionApiTests(APITestCase):
         self.assertIn('collections', response.data)
         self.assertGreaterEqual(len(response.data['collections']), 1)
 
+
+class BookFilterAndSortApiTests(APITestCase):
+    def setUp(self):
+        self.author = Author.objects.create(name='Test Author')
+        self.cat_prod = Category.objects.create(name='Productivity', slug='productivity')
+        self.cat_lead = Category.objects.create(name='Leadership', slug='leadership')
+        self.cat_tech = Category.objects.create(name='Technology', slug='technology')
+
+        # Book 1: Short duration (8m), High rating (4.9), Audio available
+        self.book1 = Book.objects.create(
+            title='Quick Lead',
+            slug='quick-lead',
+            author=self.author,
+            estimated_read_time_minutes=8,
+            rating=4.9,
+            rating_count=300,
+        )
+        self.book1.categories.add(self.cat_lead)
+        SummarySection.objects.create(
+            book=self.book1,
+            slug='sec-1',
+            order=1,
+            title='Intro',
+            audio_file='audio/sample.mp3',
+        )
+
+        # Book 2: Medium duration (15m), Medium rating (4.7), No audio
+        self.book2 = Book.objects.create(
+            title='Habits Master',
+            slug='habits-master',
+            author=self.author,
+            estimated_read_time_minutes=15,
+            rating=4.7,
+            rating_count=150,
+        )
+        self.book2.categories.add(self.cat_prod)
+
+        # Book 3: Long duration (25m), Lower rating (4.5), Audio available
+        self.book3 = Book.objects.create(
+            title='Tech Architecture',
+            slug='tech-architecture',
+            author=self.author,
+            estimated_read_time_minutes=25,
+            rating=4.5,
+            rating_count=80,
+        )
+        self.book3.categories.add(self.cat_tech)
+        SummarySection.objects.create(
+            book=self.book3,
+            slug='sec-tech-1',
+            order=1,
+            title='Architecture Key',
+            audio_file='audio/tech.mp3',
+        )
+
+    def test_filter_by_category(self):
+        url = reverse('book_list')
+        response = self.client.get(url, {'categories__slug': 'leadership'})
+        self.assertEqual(response.status_code, 200)
+        slugs = [b['slug'] for b in response.data['results']]
+        self.assertIn('quick-lead', slugs)
+        self.assertNotIn('habits-master', slugs)
+        self.assertNotIn('tech-architecture', slugs)
+
+    def test_filter_by_format_audio(self):
+        url = reverse('book_list')
+        response = self.client.get(url, {'book_format': 'audio'})
+        self.assertEqual(response.status_code, 200)
+        slugs = [b['slug'] for b in response.data['results']]
+        self.assertIn('quick-lead', slugs)
+        self.assertIn('tech-architecture', slugs)
+        self.assertNotIn('habits-master', slugs)
+
+        # Also test with has_audio=true
+        resp_audio = self.client.get(url, {'has_audio': 'true'})
+        self.assertEqual(resp_audio.status_code, 200)
+        slugs_audio = [b['slug'] for b in resp_audio.data['results']]
+        self.assertEqual(slugs_audio, slugs)
+
+    def test_filter_by_duration(self):
+        url = reverse('book_list')
+
+        # Short: < 10m
+        resp_short = self.client.get(url, {'duration': 'short'})
+        slugs_short = [b['slug'] for b in resp_short.data['results']]
+        self.assertIn('quick-lead', slugs_short)
+        self.assertNotIn('habits-master', slugs_short)
+
+        # Medium: 10-20m
+        resp_med = self.client.get(url, {'duration': 'medium'})
+        slugs_med = [b['slug'] for b in resp_med.data['results']]
+        self.assertIn('habits-master', slugs_med)
+        self.assertNotIn('quick-lead', slugs_med)
+
+        # Long: > 20m
+        resp_long = self.client.get(url, {'duration': 'long'})
+        slugs_long = [b['slug'] for b in resp_long.data['results']]
+        self.assertIn('tech-architecture', slugs_long)
+        self.assertNotIn('quick-lead', slugs_long)
+
+    def test_sort_by_highest_rated(self):
+        url = reverse('book_list')
+        response = self.client.get(url, {'sort_by': 'highest_rated'})
+        self.assertEqual(response.status_code, 200)
+        results = response.data['results']
+        ratings = [float(b['rating']) for b in results]
+        # Verify descending order
+        self.assertEqual(ratings, sorted(ratings, reverse=True))
+
+    def test_sort_by_popularity(self):
+        # Create a user and bookmark book 2
+        user = User.objects.create_user(email='fan@example.com', username='fan', password='pw')
+        UserLibraryItem.objects.create(user=user, book=self.book2)
+
+        url = reverse('book_list')
+        response = self.client.get(url, {'sort_by': 'popularity'})
+        self.assertEqual(response.status_code, 200)
+        results = response.data['results']
+        # book2 has 1 bookmark, so should appear before book1 and book3
+        self.assertEqual(results[0]['slug'], 'habits-master')
+
+

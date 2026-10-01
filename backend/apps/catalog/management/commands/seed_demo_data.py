@@ -21,19 +21,23 @@ CATEGORY_FIXTURES = [
     'Science',
     'Business',
     'Health',
+    'Leadership',
+    'Technology',
 ]
 
 BOOK_FIXTURES = [
-    ('Atomic Habits', 'Small habits, remarkable results.', 'James Clear', ['Productivity', 'Health'], True),
-    ('Deep Work', 'Focused success in a distracted world.', 'Cal Newport', ['Productivity', 'Business'], True),
-    ('Thinking, Fast and Slow', 'Two systems drive the way we think.', 'Daniel Kahneman', ['Psychology', 'Science'], True),
-    ('The Power of Habit', 'Why habits exist and how to change them.', 'Charles Duhigg', ['Productivity', 'Psychology'], False),
-    ('Essentialism', 'Do less, but better.', 'Greg McKeown', ['Productivity', 'Business'], False),
-    ('Why We Sleep', 'Sleep science for better living.', 'Matthew Walker', ['Health', 'Science'], True),
-    ('Mindset', 'The new psychology of success.', 'Carol S. Dweck', ['Psychology', 'Business'], False),
-    ('Sapiens', 'A brief history of humankind.', 'Yuval Noah Harari', ['Science', 'Health'], True),
-    ('The Lean Startup', 'Build products with continuous learning.', 'Eric Ries', ['Business', 'Productivity'], False),
-    ('The Courage to Be Disliked', 'A practical philosophy of freedom.', 'Ichiro Kishimi', ['Psychology', 'Health'], False),
+    ('Atomic Habits', 'Small habits, remarkable results.', 'James Clear', ['Productivity', 'Health'], True, 15, 4.9, 1420),
+    ('Deep Work', 'Focused success in a distracted world.', 'Cal Newport', ['Productivity', 'Business'], True, 18, 4.8, 980),
+    ('Thinking, Fast and Slow', 'Two systems drive the way we think.', 'Daniel Kahneman', ['Psychology', 'Science'], True, 22, 4.7, 1250),
+    ('The Power of Habit', 'Why habits exist and how to change them.', 'Charles Duhigg', ['Productivity', 'Psychology'], False, 16, 4.6, 810),
+    ('Essentialism', 'Do less, but better.', 'Greg McKeown', ['Productivity', 'Business'], False, 12, 4.8, 730),
+    ('Why We Sleep', 'Sleep science for better living.', 'Matthew Walker', ['Health', 'Science'], True, 24, 4.8, 640),
+    ('Mindset', 'The new psychology of success.', 'Carol S. Dweck', ['Psychology', 'Business', 'Leadership'], False, 14, 4.7, 590),
+    ('Sapiens', 'A brief history of humankind.', 'Yuval Noah Harari', ['Science', 'Health'], True, 25, 4.9, 1850),
+    ('The Lean Startup', 'Build products with continuous learning.', 'Eric Ries', ['Business', 'Productivity', 'Technology'], False, 17, 4.6, 920),
+    ('The Courage to Be Disliked', 'A practical philosophy of freedom.', 'Ichiro Kishimi', ['Psychology', 'Health'], False, 8, 4.5, 430),
+    ('Start with Why', 'How great leaders inspire everyone to take action.', 'Simon Sinek', ['Leadership', 'Business'], True, 9, 4.8, 1100),
+    ('Clean Code', 'A handbook of agile software craftsmanship.', 'Robert C. Martin', ['Technology', 'Productivity'], True, 19, 4.7, 670),
 ]
 
 
@@ -65,7 +69,7 @@ class Command(BaseCommand):
             authors[name] = author
 
         created_books = 0
-        for title, subtitle, author_name, category_names, is_premium in BOOK_FIXTURES:
+        for title, subtitle, author_name, category_names, is_premium, duration, rating, rating_count in BOOK_FIXTURES:
             author = authors.get(author_name)
             if author is None:
                 author, _ = Author.objects.get_or_create(name=author_name, defaults={'bio': f'Author of {title}.'})
@@ -79,16 +83,20 @@ class Command(BaseCommand):
                     'author': author,
                     'description': f'{title} explains the key ideas behind {subtitle.lower()}',
                     'what_you_will_learn': f'You will learn the most important ideas from {title}.',
-                    'estimated_read_time_minutes': 15,
+                    'estimated_read_time_minutes': duration,
                     'is_premium': is_premium,
+                    'rating': rating,
+                    'rating_count': rating_count,
                 },
             )
             book.author = author
             book.subtitle = subtitle
             book.description = book.description or f'{title} demo description.'
             book.what_you_will_learn = book.what_you_will_learn or f'Key ideas from {title}.'
-            book.estimated_read_time_minutes = book.estimated_read_time_minutes or 15
+            book.estimated_read_time_minutes = duration
             book.is_premium = is_premium
+            book.rating = rating
+            book.rating_count = rating_count
             book.save()
             book.categories.set([categories[name] for name in category_names])
 

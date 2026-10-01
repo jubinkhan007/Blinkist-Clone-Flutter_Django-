@@ -22,14 +22,26 @@ class CatalogRepository {
   Future<List<Book>> getBooks({
     String? query,
     String? categorySlug,
+    String? bookFormat,
+    String? duration,
+    String? sortBy,
     int page = 1,
   }) async {
     final Map<String, dynamic> queryParameters = {'page': page};
-    if (query != null && query.isNotEmpty) {
-      queryParameters['search'] = query;
+    if (query != null && query.trim().isNotEmpty) {
+      queryParameters['search'] = query.trim();
     }
-    if (categorySlug != null) {
+    if (categorySlug != null && categorySlug.isNotEmpty && categorySlug != 'all') {
       queryParameters['categories__slug'] = categorySlug;
+    }
+    if (bookFormat != null && bookFormat.isNotEmpty && bookFormat != 'all') {
+      queryParameters['book_format'] = bookFormat;
+    }
+    if (duration != null && duration.isNotEmpty && duration != 'all') {
+      queryParameters['duration'] = duration;
+    }
+    if (sortBy != null && sortBy.isNotEmpty) {
+      queryParameters['sort_by'] = sortBy;
     }
 
     final response = await _dio.get(
@@ -37,10 +49,92 @@ class CatalogRepository {
       queryParameters: queryParameters,
     );
 
-    final List data = response.data['results'];
-    return data.map((json) => Book.fromJson(json)).toList();
+    final dynamic data = response.data;
+    final List results = (data is Map && data.containsKey('results'))
+        ? data['results']
+        : (data is List ? data : []);
+    return results.map((json) => Book.fromJson(json as Map<String, dynamic>)).toList();
   }
 }
+
+class ExploreFilter {
+  final String query;
+  final String? categorySlug;
+  final String format; // 'all', 'audio', 'text'
+  final String duration; // 'all', 'short', 'medium', 'long'
+  final String sortBy; // 'popularity', 'newest', 'highest_rated'
+
+  const ExploreFilter({
+    this.query = '',
+    this.categorySlug,
+    this.format = 'all',
+    this.duration = 'all',
+    this.sortBy = 'popularity',
+  });
+
+  bool get hasActiveFilters =>
+      (categorySlug != null && categorySlug != 'all') ||
+      format != 'all' ||
+      duration != 'all' ||
+      sortBy != 'popularity' ||
+      query.trim().isNotEmpty;
+
+  int get activeFiltersCount {
+    int count = 0;
+    if (categorySlug != null && categorySlug != 'all') count++;
+    if (format != 'all') count++;
+    if (duration != 'all') count++;
+    if (sortBy != 'popularity') count++;
+    return count;
+  }
+
+  ExploreFilter copyWith({
+    String? query,
+    String? categorySlug,
+    bool clearCategory = false,
+    String? format,
+    String? duration,
+    String? sortBy,
+  }) {
+    return ExploreFilter(
+      query: query ?? this.query,
+      categorySlug: clearCategory ? null : (categorySlug ?? this.categorySlug),
+      format: format ?? this.format,
+      duration: duration ?? this.duration,
+      sortBy: sortBy ?? this.sortBy,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExploreFilter &&
+          runtimeType == other.runtimeType &&
+          query == other.query &&
+          categorySlug == other.categorySlug &&
+          format == other.format &&
+          duration == other.duration &&
+          sortBy == other.sortBy;
+
+  @override
+  int get hashCode =>
+      query.hashCode ^
+      categorySlug.hashCode ^
+      format.hashCode ^
+      duration.hashCode ^
+      sortBy.hashCode;
+}
+
+final filteredBooksProvider =
+    FutureProvider.family<List<Book>, ExploreFilter>((ref, filter) async {
+  return ref.watch(catalogRepositoryProvider).getBooks(
+        query: filter.query,
+        categorySlug: filter.categorySlug,
+        bookFormat: filter.format,
+        duration: filter.duration,
+        sortBy: filter.sortBy,
+      );
+});
 
 @riverpod
 CatalogRepository catalogRepository(CatalogRepositoryRef ref) {

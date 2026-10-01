@@ -1,3 +1,4 @@
+from django.db.models import Count
 from rest_framework import filters, generics, permissions, views
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -17,7 +18,6 @@ class CategoryListView(generics.ListAPIView):
     pagination_class = None
 
 class BookListView(generics.ListAPIView):
-    queryset = Book.objects.all().order_by('-created_at')
     serializer_class = BookListSerializer
     permission_classes = (permissions.AllowAny,)
     
@@ -26,8 +26,45 @@ class BookListView(generics.ListAPIView):
     
     # Define capabilities
     filterset_fields = ['categories__slug', 'is_premium', 'author__name']
-    search_fields = ['title', 'subtitle', 'author__name', 'categories__name']  # Uses PostgreSQL icontains
-    ordering_fields = ['created_at', 'title', 'estimated_read_time_minutes']
+    search_fields = ['title', 'subtitle', 'author__name', 'categories__name']
+    ordering_fields = ['created_at', 'title', 'estimated_read_time_minutes', 'rating']
+
+    def get_queryset(self):
+        qs = Book.objects.all().prefetch_related('categories', 'author', 'sections')
+
+        # 1. Format Filter: Audio vs Text
+        book_format = (
+            self.request.query_params.get('book_format') or
+            self.request.query_params.get('content_format')
+        )
+        if book_format == 'audio' or self.request.query_params.get('has_audio') == 'true':
+            qs = qs.filter(sections__audio_file__isnull=False).exclude(sections__audio_file='').distinct()
+        elif book_format == 'text':
+            pass
+
+        # 2. Duration Filter (<10m, 10-20m, 20m+)
+        duration = self.request.query_params.get('duration')
+        if duration == 'short':
+            qs = qs.filter(estimated_read_time_minutes__lt=10)
+        elif duration == 'medium':
+            qs = qs.filter(estimated_read_time_minutes__gte=10, estimated_read_time_minutes__lte=20)
+        elif duration == 'long':
+            qs = qs.filter(estimated_read_time_minutes__gt=20)
+
+        # 3. Sorting: Popularity, Newest, Highest Rated
+        sort_by = self.request.query_params.get('sort_by') or self.request.query_params.get('ordering')
+        if sort_by in ('popularity', '-popularity'):
+            qs = qs.annotate(
+                popularity_score=Count('saved_by', distinct=True) + Count('user_progress', distinct=True)
+            ).order_by('-popularity_score', '-created_at')
+        elif sort_by in ('highest_rated', 'rating', '-rating'):
+            qs = qs.order_by('-rating', '-created_at')
+        elif sort_by in ('newest', '-newest', '-created_at'):
+            qs = qs.order_by('-created_at')
+        elif not sort_by:
+            qs = qs.order_by('-created_at')
+
+        return qs
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

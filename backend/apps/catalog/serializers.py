@@ -70,12 +70,18 @@ class BookListSerializer(serializers.ModelSerializer):
     cover_image_url = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
     is_daily_free = serializers.SerializerMethodField()
+    has_audio = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
         fields = ('id', 'title', 'subtitle', 'slug', 'author', 'categories', 
                   'cover_image_url', 'estimated_read_time_minutes', 'is_premium', 
-                  'is_daily_free', 'is_saved')
+                  'is_daily_free', 'is_saved', 'rating', 'rating_count', 'has_audio')
+
+    def get_has_audio(self, obj):
+        if hasattr(obj, 'has_audio_cached'):
+            return bool(obj.has_audio_cached)
+        return obj.sections.filter(audio_file__isnull=False).exclude(audio_file='').exists()
 
     def get_cover_image_url(self, obj):
         if obj.cover_image:
