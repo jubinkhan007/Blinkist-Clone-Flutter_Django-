@@ -66,7 +66,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/books/:slug/listen',
         builder: (context, state) {
           final slug = state.pathParameters['slug']!;
-          return AudioPlayerScreen(slug: slug);
+          final secParam = state.uri.queryParameters['section'];
+          final posParam = state.uri.queryParameters['pos'];
+          final initialSection =
+              secParam != null ? int.tryParse(secParam) : null;
+          final initialPos = posParam != null ? int.tryParse(posParam) : null;
+          return AudioPlayerScreen(
+            slug: slug,
+            initialSectionIndex: initialSection,
+            initialPositionSeconds: initialPos,
+          );
         },
       ),
       GoRoute(

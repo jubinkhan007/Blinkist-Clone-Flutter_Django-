@@ -10,6 +10,8 @@ import '../../explore/domain/catalog_models.dart';
 import '../../home/presentation/home_screen.dart';
 import '../../reader/data/highlight_repository.dart';
 import '../../reader/domain/highlight_models.dart';
+import '../../reader/data/audio_bookmark_repository.dart';
+import '../../reader/domain/audio_bookmark_models.dart';
 import '../../reader/presentation/quote_card_dialog.dart';
 import '../data/library_repository.dart';
 import '../data/offline_downloads_service.dart';
@@ -633,8 +635,35 @@ class _DownloadedBookCard extends ConsumerWidget {
   }
 }
 
-class _NotebookTab extends ConsumerWidget {
+enum _NotebookFilter { all, highlights, audioBookmarks }
+
+class _NotebookBookGroup {
+  final String slug;
+  final String title;
+  final String author;
+  final String? coverUrl;
+  final List<UserHighlight> highlights;
+  final List<AudioBookmark> audioBookmarks;
+
+  _NotebookBookGroup({
+    required this.slug,
+    required this.title,
+    required this.author,
+    this.coverUrl,
+    required this.highlights,
+    required this.audioBookmarks,
+  });
+}
+
+class _NotebookTab extends ConsumerStatefulWidget {
   const _NotebookTab();
+
+  @override
+  ConsumerState<_NotebookTab> createState() => _NotebookTabState();
+}
+
+class _NotebookTabState extends ConsumerState<_NotebookTab> {
+  _NotebookFilter _filter = _NotebookFilter.all;
 
   Color _getHighlightColor(String colorName) {
     switch (colorName.toLowerCase()) {
@@ -650,79 +679,330 @@ class _NotebookTab extends ConsumerWidget {
     }
   }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final highlightsAsync = ref.watch(userHighlightsProvider);
+  Future<void> _confirmDeleteHighlight(
+    BuildContext context,
+    WidgetRef ref,
+    UserHighlight h,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Highlight?'),
+        content: const Text(
+          'Are you sure you want to remove this highlight from your notebook?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await ref.read(highlightRepositoryProvider).deleteHighlight(h.id);
+        ref.invalidate(userHighlightsProvider);
+        ref.invalidate(bookHighlightsProvider(h.bookSlug));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Highlight removed from Notebook'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete: $e')),
+          );
+        }
+      }
+    }
+  }
 
-    return highlightsAsync.when(
-      data: (highlights) {
-        if (highlights.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
+  Future<void> _confirmDeleteAudioBookmark(
+    BuildContext context,
+    WidgetRef ref,
+    AudioBookmark bm,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Audio Bookmark?'),
+        content: Text(
+          'Remove bookmark at ${bm.displayTimestamp} from your notebook?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await ref.read(audioBookmarkRepositoryProvider).deleteBookmark(bm.id);
+        ref.invalidate(userAudioBookmarksProvider);
+        ref.invalidate(bookAudioBookmarksProvider(bm.bookSlug));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Audio bookmark removed from Notebook'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete bookmark: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final highlightsAsync = ref.watch(userHighlightsProvider);
+    final audioBookmarksAsync = ref.watch(userAudioBookmarksProvider);
+
+    if (highlightsAsync.isLoading && audioBookmarksAsync.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final highlights = highlightsAsync.valueOrNull ?? [];
+    final audioBookmarks = audioBookmarksAsync.valueOrNull ?? [];
+
+    if (highlights.isEmpty && audioBookmarks.isEmpty) {
+      if (highlightsAsync.hasError && audioBookmarksAsync.hasError) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 12),
+                Text(
+                  'Failed to load notebook: ${highlightsAsync.error}',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    ref.invalidate(userHighlightsProvider);
+                    ref.invalidate(userAudioBookmarksProvider);
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.edit_note_rounded,
+                size: 72,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your Notebook is Empty',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Highlight quotes and save timed audio bookmarks while reading or listening to build your personal knowledge base.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                icon: const Icon(Icons.explore_outlined, size: 18),
+                onPressed: () => context.go('/explore'),
+                label: const Text('Start Reading'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Group items by book
+    final Map<String, _NotebookBookGroup> groups = {};
+
+    if (_filter == _NotebookFilter.all || _filter == _NotebookFilter.highlights) {
+      for (final h in highlights) {
+        final key = h.bookSlug.isNotEmpty
+            ? h.bookSlug
+            : (h.bookTitle.isNotEmpty ? h.bookTitle : 'unknown');
+        final group = groups.putIfAbsent(
+          key,
+          () => _NotebookBookGroup(
+            slug: h.bookSlug,
+            title: h.bookTitle.isNotEmpty ? h.bookTitle : 'Unknown Book',
+            author: h.bookAuthor,
+            coverUrl: h.bookCoverUrl,
+            highlights: [],
+            audioBookmarks: [],
+          ),
+        );
+        group.highlights.add(h);
+      }
+    }
+
+    if (_filter == _NotebookFilter.all || _filter == _NotebookFilter.audioBookmarks) {
+      for (final bm in audioBookmarks) {
+        final key = bm.bookSlug.isNotEmpty
+            ? bm.bookSlug
+            : (bm.bookTitle.isNotEmpty ? bm.bookTitle : 'unknown');
+        final group = groups.putIfAbsent(
+          key,
+          () => _NotebookBookGroup(
+            slug: bm.bookSlug,
+            title: bm.bookTitle.isNotEmpty ? bm.bookTitle : 'Unknown Book',
+            author: bm.bookAuthor,
+            coverUrl: bm.bookCoverUrl,
+            highlights: [],
+            audioBookmarks: [],
+          ),
+        );
+        group.audioBookmarks.add(bm);
+      }
+    }
+
+    final filteredGroups = groups.values
+        .where((g) => g.highlights.isNotEmpty || g.audioBookmarks.isNotEmpty)
+        .toList();
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(userHighlightsProvider);
+        ref.invalidate(userAudioBookmarksProvider);
+        await Future.wait([
+          ref.read(userHighlightsProvider.future),
+          ref.read(userAudioBookmarksProvider.future),
+        ]);
+      },
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                FilterChip(
+                  selected: _filter == _NotebookFilter.all,
+                  label: Text('All (${highlights.length + audioBookmarks.length})'),
+                  onSelected: (_) => setState(() => _filter = _NotebookFilter.all),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  selected: _filter == _NotebookFilter.highlights,
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.format_quote_rounded, size: 16),
+                      const SizedBox(width: 4),
+                      Text('Quotes (${highlights.length})'),
+                    ],
+                  ),
+                  onSelected: (_) =>
+                      setState(() => _filter = _NotebookFilter.highlights),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  selected: _filter == _NotebookFilter.audioBookmarks,
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.headphones_rounded, size: 16),
+                      const SizedBox(width: 4),
+                      Text('Audio Bookmarks (${audioBookmarks.length})'),
+                    ],
+                  ),
+                  onSelected: (_) =>
+                      setState(() => _filter = _NotebookFilter.audioBookmarks),
+                ),
+              ],
+            ),
+          ),
+
+          if (filteredGroups.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.edit_note_rounded,
-                    size: 72,
+                    _filter == _NotebookFilter.highlights
+                        ? Icons.format_quote_rounded
+                        : Icons.headphones_rounded,
+                    size: 56,
                     color: Theme.of(context).colorScheme.outline,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
-                    'Your Notebook is Empty',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    _filter == _NotebookFilter.highlights
+                        ? 'No Quotes Yet'
+                        : 'No Audio Bookmarks Yet',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
-                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Highlight quotes and write notes while reading summaries to build your personal knowledge base.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
+                    _filter == _NotebookFilter.highlights
+                        ? 'Select and highlight text while reading summaries.'
+                        : 'Tap the bookmark icon in the audio player during playback to save key moments.',
                     textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.explore_outlined, size: 18),
-                    onPressed: () => context.go('/explore'),
-                    label: const Text('Start Reading'),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _filter = _NotebookFilter.all),
+                    child: const Text('Show All Items'),
                   ),
                 ],
               ),
-            ),
-          );
-        }
-
-        // Group highlights by book
-        final Map<String, List<UserHighlight>> grouped = {};
-        for (final h in highlights) {
-          final key = h.bookTitle.isNotEmpty
-              ? h.bookTitle
-              : (h.bookSlug.isNotEmpty ? h.bookSlug : 'Unknown Book');
-          grouped.putIfAbsent(key, () => []).add(h);
-        }
-
-        return RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(userHighlightsProvider);
-            await ref.read(userHighlightsProvider.future);
-          },
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            itemCount: grouped.keys.length,
-            itemBuilder: (context, index) {
-              final bookTitle = grouped.keys.elementAt(index);
-              final bookHighlights = grouped[bookTitle]!;
-              final firstH = bookHighlights.first;
-
+            )
+          else
+            ...filteredGroups.map((group) {
               return Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerLow,
-                margin: const EdgeInsets.only(bottom: 16),
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
@@ -741,12 +1021,12 @@ class _NotebookTab extends ConsumerWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          if (firstH.bookCoverUrl != null &&
-                              firstH.bookCoverUrl!.isNotEmpty)
+                          if (group.coverUrl != null &&
+                              group.coverUrl!.isNotEmpty)
                             ClipRRect(
                               borderRadius: BorderRadius.circular(6),
                               child: Image.network(
-                                firstH.bookCoverUrl!,
+                                group.coverUrl!,
                                 width: 36,
                                 height: 50,
                                 fit: BoxFit.cover,
@@ -784,7 +1064,7 @@ class _NotebookTab extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  bookTitle,
+                                  group.title,
                                   style: Theme.of(context)
                                       .textTheme
                                       .titleSmall
@@ -794,9 +1074,9 @@ class _NotebookTab extends ConsumerWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (firstH.bookAuthor.isNotEmpty)
+                                if (group.author.isNotEmpty)
                                   Text(
-                                    firstH.bookAuthor,
+                                    group.author,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Theme.of(context)
@@ -809,30 +1089,30 @@ class _NotebookTab extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          TextButton(
-                            style: TextButton.styleFrom(
+                          if (group.slug.isNotEmpty) ...[
+                            IconButton(
+                              icon: const Icon(Icons.menu_book_rounded, size: 20),
+                              tooltip: 'Read Summary',
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              onPressed: () =>
+                                  context.push('/books/${group.slug}/read'),
                             ),
-                            onPressed: () =>
-                                context.push('/books/${firstH.bookSlug}/read'),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('Read', style: TextStyle(fontSize: 12)),
-                                SizedBox(width: 2),
-                                Icon(Icons.chevron_right, size: 16),
-                              ],
+                            IconButton(
+                              icon: const Icon(Icons.headphones_rounded, size: 20),
+                              tooltip: 'Listen to Audio',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  context.push('/books/${group.slug}/listen'),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 12),
                       const Divider(height: 1),
                       const SizedBox(height: 12),
 
-                      // Highlights inside this book
-                      ...bookHighlights.map((h) {
+                      // Highlights (Quotes)
+                      ...group.highlights.map((h) {
                         final color = _getHighlightColor(h.color);
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -947,75 +1227,12 @@ class _NotebookTab extends ConsumerWidget {
                                         ),
                                         tooltip: 'Delete Highlight',
                                         visualDensity: VisualDensity.compact,
-                                        onPressed: () async {
-                                          final confirmed =
-                                              await showDialog<bool>(
-                                            context: context,
-                                            builder: (ctx) => AlertDialog(
-                                              title: const Text(
-                                                'Delete Highlight?',
-                                              ),
-                                              content: const Text(
-                                                'Are you sure you want to remove this highlight from your notebook?',
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, false),
-                                                  child: const Text('Cancel'),
-                                                ),
-                                                FilledButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(ctx, true),
-                                                  child: const Text('Delete'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                          if (confirmed == true) {
-                                            try {
-                                              await ref
-                                                  .read(
-                                                    highlightRepositoryProvider,
-                                                  )
-                                                  .deleteHighlight(h.id);
-                                              ref.invalidate(
-                                                userHighlightsProvider,
-                                              );
-                                              ref.invalidate(
-                                                bookHighlightsProvider(
-                                                  h.bookSlug,
-                                                ),
-                                              );
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'Highlight removed from Notebook',
-                                                    ),
-                                                    duration: Duration(
-                                                      seconds: 2,
-                                                    ),
-                                                  ),
-                                                );
-                                              }
-                                            } catch (e) {
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      'Failed to delete: $e',
-                                                    ),
-                                                  ),
-                                                );
-                                              }
-                                            }
-                                          }
-                                        },
+                                        onPressed: () =>
+                                            _confirmDeleteHighlight(
+                                          context,
+                                          ref,
+                                          h,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1025,36 +1242,187 @@ class _NotebookTab extends ConsumerWidget {
                           ),
                         );
                       }),
+
+                      // Audio Bookmarks
+                      ...group.audioBookmarks.map((bm) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border(
+                              left: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 4,
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.timer_outlined,
+                                          size: 13,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          bm.displayTimestamp,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (bm.sectionTitle != null &&
+                                      bm.sectionTitle!.isNotEmpty)
+                                    Expanded(
+                                      child: Text(
+                                        bm.sectionTitle!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  else
+                                    const Spacer(),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                    ),
+                                    tooltip: 'Delete Audio Bookmark',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () =>
+                                        _confirmDeleteAudioBookmark(
+                                      context,
+                                      ref,
+                                      bm,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (bm.title.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  bm.title,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                              if (bm.note.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withOpacity(0.5),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.note_alt_outlined,
+                                        size: 15,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          bm.note,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.tonalIcon(
+                                  style: FilledButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.play_circle_fill,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    'Play from ${bm.displayTimestamp}',
+                                  ),
+                                  onPressed: () {
+                                    final sectionParam = bm.sectionOrder != null
+                                        ? '&section=${bm.sectionOrder}'
+                                        : '';
+                                    context.push(
+                                      '/books/${bm.bookSlug}/listen?pos=${bm.timestampSeconds}$sectionParam',
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
               );
-            },
-          ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 12),
-              Text(
-                'Failed to load notebook: $error',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => ref.invalidate(userHighlightsProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
+            }),
+        ],
       ),
     );
   }
 }
+

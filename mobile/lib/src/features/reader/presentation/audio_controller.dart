@@ -325,13 +325,14 @@ class AudioController extends StateNotifier<AudioState> {
     String? authorName,
     String? coverImageUrl,
     int? startIndex,
+    Duration? startPosition,
     bool autoPlay = false,
   }) async {
     _sections = sections;
     int initialIndex = startIndex ?? 0;
-    Duration initialPosition = Duration.zero;
+    Duration initialPosition = startPosition ?? Duration.zero;
 
-    if (startIndex == null) {
+    if (startIndex == null && startPosition == null) {
       try {
         final progress = await _progressRepository.getAudioProgress(bookId);
         if (progress.currentSectionId != null) {
@@ -626,6 +627,13 @@ class AudioController extends StateNotifier<AudioState> {
       await _handler.play();
     } else {
       state = state.copyWith(errorMessage: 'No audio for this section.');
+    }
+  }
+
+  Future<void> jumpToSectionAndSeek(int index, Duration position) async {
+    if (index >= 0 && index < _sections.length) {
+      await jumpToSection(index);
+      await seek(position);
     }
   }
 

@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
 import '../../book/domain/book_models.dart';
+import '../data/audio_bookmark_repository.dart';
 import 'audio_controller.dart';
 
 class AudioPlayerScreen extends ConsumerStatefulWidget {
   final String slug;
+  final int? initialSectionIndex;
+  final int? initialPositionSeconds;
 
-  const AudioPlayerScreen({super.key, required this.slug});
+  const AudioPlayerScreen({
+    super.key,
+    required this.slug,
+    this.initialSectionIndex,
+    this.initialPositionSeconds,
+  });
 
   @override
   ConsumerState<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
@@ -38,15 +47,34 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
               final isAlreadyLoaded =
                   audioState.bookSlug == book.slug &&
                   audioState.totalSections == sections.length;
-              if (!isAlreadyLoaded) {
-                controller.loadBook(
-                  bookId: book.id,
-                  bookSlug: book.slug,
-                  bookTitle: book.title,
-                  authorName: book.author.name,
-                  coverImageUrl: book.coverImageUrl,
-                  sections: sections,
-                );
+              if (!isAlreadyLoaded ||
+                  widget.initialSectionIndex != null ||
+                  widget.initialPositionSeconds != null) {
+                if (isAlreadyLoaded &&
+                    (widget.initialSectionIndex != null ||
+                        widget.initialPositionSeconds != null)) {
+                  final targetSec =
+                      widget.initialSectionIndex ?? audioState.currentIndex;
+                  final targetPos = widget.initialPositionSeconds != null
+                      ? Duration(seconds: widget.initialPositionSeconds!)
+                      : Duration.zero;
+                  controller.jumpToSectionAndSeek(targetSec, targetPos);
+                } else {
+                  controller.loadBook(
+                    bookId: book.id,
+                    bookSlug: book.slug,
+                    bookTitle: book.title,
+                    authorName: book.author.name,
+                    coverImageUrl: book.coverImageUrl,
+                    sections: sections,
+                    startIndex: widget.initialSectionIndex,
+                    startPosition: widget.initialPositionSeconds != null
+                        ? Duration(seconds: widget.initialPositionSeconds!)
+                        : null,
+                    autoPlay: widget.initialSectionIndex != null ||
+                        widget.initialPositionSeconds != null,
+                  );
+                }
               }
             });
           }
@@ -973,6 +1001,353 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     );
   }
 
+  void _showBookmarkSheet(BuildContext context) {
+    final audioState = ref.read(audioControllerProvider);
+    final curIndex = audioState.currentIndex;
+    final currentSection =
+        curIndex < sections.length ? sections[curIndex] : null;
+    final positionSec = audioState.currentPosition.inSeconds;
+    final formattedTime = _formatDuration(audioState.currentPosition);
+    final noteController = TextEditingController();
+    final titleController = TextEditingController(
+      text: currentSection != null
+          ? currentSection.title
+          : 'Bookmark @ $formattedTime',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bottomSheetContext) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
+        ),
+        child: Consumer(
+          builder: (context, ref, _) {
+            final bookBookmarksAsync =
+                ref.watch(bookAudioBookmarksProvider(book.slug));
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.bookmark_add_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Save Audio Bookmark',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(bottomSheetContext),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.timer_outlined,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    formattedTime,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                currentSection?.title ?? book.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Personal Note / Takeaway (Optional)',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: noteController,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          hintText:
+                              'What inspired you at this moment in the summary?',
+                          hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withOpacity(0.7),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withOpacity(0.3),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color:
+                                  Theme.of(context).colorScheme.outlineVariant,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.bookmark_added_rounded,
+                              size: 18),
+                          label: const Text('Save Bookmark to Notebook'),
+                          onPressed: () async {
+                            final note = noteController.text.trim();
+                            final title = titleController.text.trim();
+                            try {
+                              await ref
+                                  .read(audioBookmarkRepositoryProvider)
+                                  .createBookmark(
+                                    bookSlug: book.slug,
+                                    sectionId: currentSection?.id,
+                                    timestampSeconds: positionSec,
+                                    title: title,
+                                    note: note,
+                                  );
+                              ref.invalidate(userAudioBookmarksProvider);
+                              ref.invalidate(
+                                bookAudioBookmarksProvider(book.slug),
+                              );
+                              if (bottomSheetContext.mounted) {
+                                Navigator.pop(bottomSheetContext);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Saved bookmark at $formattedTime to My Notebook!',
+                                    ),
+                                    action: SnackBarAction(
+                                      label: 'View Notebook',
+                                      onPressed: () => context.go('/library'),
+                                    ),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (bottomSheetContext.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to save bookmark: $e'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      bookBookmarksAsync.when(
+                        data: (bookmarks) {
+                          if (bookmarks.isEmpty) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Saved Bookmarks in this Book (${bookmarks.length})',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: bookmarks.length,
+                                itemBuilder: (context, i) {
+                                  final bm = bookmarks[i];
+                                  return Container(
+                                    margin:
+                                        const EdgeInsets.symmetric(vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                          .withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: ListTile(
+                                      dense: true,
+                                      leading: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primaryContainer,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          bm.displayTimestamp,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        bm.sectionTitle ?? bm.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: bm.note.isNotEmpty
+                                          ? Text(
+                                              bm.note,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            )
+                                          : null,
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.play_circle_outline_rounded,
+                                          size: 22,
+                                        ),
+                                        tooltip: 'Jump to timestamp',
+                                        onPressed: () {
+                                          final secIdx = sections.indexWhere(
+                                            (s) => s.id == bm.sectionId,
+                                          );
+                                          final targetIdx =
+                                              secIdx >= 0 ? secIdx : curIndex;
+                                          ref
+                                              .read(
+                                                audioControllerProvider.notifier,
+                                              )
+                                              .jumpToSectionAndSeek(
+                                                targetIdx,
+                                                Duration(
+                                                  seconds: bm.timestampSeconds,
+                                                ),
+                                              );
+                                          Navigator.pop(bottomSheetContext);
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final audioState = ref.watch(audioControllerProvider);
@@ -1020,6 +1395,11 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
         ),
         actions: [
           _buildSleepTimerButton(context, audioState),
+          IconButton(
+            icon: const Icon(Icons.bookmark_add_outlined),
+            tooltip: 'Save Bookmark',
+            onPressed: () => _showBookmarkSheet(context),
+          ),
           IconButton(
             icon: Badge.count(
               count: audioState.queue.length,
@@ -1157,6 +1537,52 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                     ],
                   ),
                 ),
+                // Quick Bookmark bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      InkWell(
+                        onTap: () => _showBookmarkSheet(context),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.bookmark_add_rounded,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Bookmark @ ${_formatDuration(position)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
                 // Playback controls
                 Padding(
                   padding: const EdgeInsets.only(left: 8, right: 8, bottom: 16),
