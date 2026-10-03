@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
-from apps.catalog.models import Author, Book, Category, UserLibraryItem, Collection, CollectionItem
+from apps.catalog.models import Author, Book, Category, UserLibraryItem, Collection, CollectionItem, UserAudioQueueItem
 from apps.summaries.models import SummarySection
 
 
@@ -474,5 +474,88 @@ class BookAskAiApiTests(APITestCase):
         self.assertIn("1% improvements compound", result['answer'])
         self.assertEqual(len(result['suggested_followups']), 3)
         self.assertEqual(result['suggested_followups'][1], "What is the 2-minute rule?")
+
+
+class AudioQueueApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='listener@example.com',
+            username='listener',
+            password='password123',
+        )
+        self.author = Author.objects.create(name='Test Author')
+        self.book1 = Book.objects.create(
+            title='Audio Book 1',
+            slug='audio-book-1',
+            author=self.author,
+            description='Desc 1',
+        )
+        self.book2 = Book.objects.create(
+            title='Audio Book 2',
+            slug='audio-book-2',
+            author=self.author,
+            description='Desc 2',
+        )
+
+    def test_add_and_list_queue(self):
+        self.client.force_authenticate(self.user)
+        url = reverse('user_audio_queue')
+
+        # Add book 1
+        resp1 = self.client.post(url, {'book_slug': self.book1.slug}, format='json')
+        self.assertEqual(resp1.status_code, 201)
+        self.assertEqual(resp1.data['book']['slug'], self.book1.slug)
+        self.assertEqual(resp1.data['order'], 0)
+
+        # Add book 2
+        resp2 = self.client.post(url, {'book_slug': self.book2.slug}, format='json')
+        self.assertEqual(resp2.status_code, 201)
+        self.assertEqual(resp2.data['book']['slug'], self.book2.slug)
+        self.assertEqual(resp2.data['order'], 1)
+
+        # List queue
+        list_resp = self.client.get(url)
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(len(list_resp.data), 2)
+        self.assertEqual(list_resp.data[0]['book']['slug'], self.book1.slug)
+        self.assertEqual(list_resp.data[1]['book']['slug'], self.book2.slug)
+
+    def test_remove_from_queue(self):
+        self.client.force_authenticate(self.user)
+        UserAudioQueueItem.objects.create(user=self.user, book=self.book1, order=0)
+
+        del_url = reverse('user_audio_queue_delete', kwargs={'book_slug': self.book1.slug})
+        resp = self.client.delete(del_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data['deleted'])
+        self.assertFalse(UserAudioQueueItem.objects.filter(user=self.user, book=self.book1).exists())
+
+    def test_reorder_queue(self):
+        self.client.force_authenticate(self.user)
+        UserAudioQueueItem.objects.create(user=self.user, book=self.book1, order=0)
+        UserAudioQueueItem.objects.create(user=self.user, book=self.book2, order=1)
+
+        reorder_url = reverse('user_audio_queue_reorder')
+        resp = self.client.post(reorder_url, {'slugs': [self.book2.slug, self.book1.slug]}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data['reordered'])
+
+        # Verify new order in database
+        item2 = UserAudioQueueItem.objects.get(user=self.user, book=self.book2)
+        item1 = UserAudioQueueItem.objects.get(user=self.user, book=self.book1)
+        self.assertEqual(item2.order, 0)
+        self.assertEqual(item1.order, 1)
+
+    def test_clear_queue(self):
+        self.client.force_authenticate(self.user)
+        UserAudioQueueItem.objects.create(user=self.user, book=self.book1, order=0)
+        UserAudioQueueItem.objects.create(user=self.user, book=self.book2, order=1)
+
+        clear_url = reverse('user_audio_queue_clear')
+        resp = self.client.post(clear_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data['cleared'])
+        self.assertEqual(UserAudioQueueItem.objects.filter(user=self.user).count(), 0)
+
 
 

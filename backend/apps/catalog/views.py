@@ -3,13 +3,14 @@ from rest_framework import filters, generics, permissions, status, views
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.catalog.ai_service import ask_book_ai
-from apps.catalog.models import Book, Category, UserLibraryItem, Collection
+from apps.catalog.models import Book, Category, UserLibraryItem, Collection, UserAudioQueueItem
 from apps.catalog.serializers import (
     BookListSerializer,
     BookDetailSerializer,
     CategorySerializer,
     CollectionListSerializer,
     CollectionDetailSerializer,
+    UserAudioQueueItemSerializer,
 )
 
 class CategoryListView(generics.ListAPIView):
@@ -174,4 +175,69 @@ class BookAskAiView(views.APIView):
             history=history,
         )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class UserAudioQueueView(generics.ListCreateAPIView):
+    serializer_class = UserAudioQueueItemSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
+
+    def get_queryset(self):
+        return UserAudioQueueItem.objects.filter(
+            user=self.request.user
+        ).select_related('book', 'book__author').prefetch_related('book__categories').order_by('order', 'added_at')
+
+    def create(self, request, *args, **kwargs):
+        book_slug = request.data.get('book_slug')
+        if not book_slug:
+            return Response({'error': 'book_slug is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        book = generics.get_object_or_404(Book, slug=book_slug)
+        existing = UserAudioQueueItem.objects.filter(user=request.user, book=book).first()
+        if existing:
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        last_item = UserAudioQueueItem.objects.filter(user=request.user).order_by('-order').first()
+        next_order = (last_item.order + 1) if last_item else 0
+
+        queue_item = UserAudioQueueItem.objects.create(
+            user=request.user,
+            book=book,
+            order=next_order,
+        )
+        serializer = self.get_serializer(queue_item)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class UserAudioQueueDeleteView(views.APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def delete(self, request, book_slug):
+        book = generics.get_object_or_404(Book, slug=book_slug)
+        deleted_count, _ = UserAudioQueueItem.objects.filter(user=request.user, book=book).delete()
+        return Response({'deleted': bool(deleted_count)}, status=status.HTTP_200_OK)
+
+
+class UserAudioQueueClearView(views.APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request):
+        UserAudioQueueItem.objects.filter(user=request.user).delete()
+        return Response({'cleared': True}, status=status.HTTP_200_OK)
+
+
+class UserAudioQueueReorderView(views.APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request):
+        slugs = request.data.get('slugs', [])
+        if not isinstance(slugs, list):
+            return Response({'error': 'slugs must be a list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        for index, slug in enumerate(slugs):
+            UserAudioQueueItem.objects.filter(user=request.user, book__slug=slug).update(order=index)
+
+        return Response({'reordered': True}, status=status.HTTP_200_OK)
+
 

@@ -38,17 +38,22 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final playing = _player.playing;
     playbackState.add(playbackState.value.copyWith(
       controls: [
+        MediaControl.rewind,
         MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
         MediaControl.skipToNext,
+        MediaControl.fastForward,
       ],
       systemActions: const {
         MediaAction.seek,
         MediaAction.seekForward,
         MediaAction.seekBackward,
+        MediaAction.fastForward,
+        MediaAction.rewind,
+        MediaAction.skipToNext,
+        MediaAction.skipToPrevious,
       },
-      androidCompactActionIndices: const [0, 1, 3],
+      androidCompactActionIndices: const [1, 2, 3],
       processingState: const {
         ProcessingState.idle: AudioProcessingState.idle,
         ProcessingState.loading: AudioProcessingState.loading,
@@ -75,6 +80,27 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> fastForward() async {
+    final newPos = _player.position + const Duration(seconds: 30);
+    final total = _player.duration;
+    if (total != null && newPos > total) {
+      await _player.seek(total);
+    } else {
+      await _player.seek(newPos);
+    }
+  }
+
+  @override
+  Future<void> rewind() async {
+    final newPos = _player.position - const Duration(seconds: 15);
+    if (newPos.isNegative) {
+      await _player.seek(Duration.zero);
+    } else {
+      await _player.seek(newPos);
+    }
+  }
 
   @override
   Future<void> skipToNext() => _player.seekToNext();

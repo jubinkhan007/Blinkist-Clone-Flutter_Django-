@@ -93,6 +93,28 @@ class UserLibraryItem(models.Model):
         return f"{self.user.email} saved {self.book.title}"
 
 
+class UserAudioQueueItem(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='audio_queue',
+    )
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name='audio_queued_by',
+    )
+    order = models.PositiveIntegerField(default=0)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'added_at']
+        unique_together = ('user', 'book')
+
+    def __str__(self):
+        return f"{self.user.email} queued {self.book.title} (order: {self.order})"
+
+
 class DailyPick(models.Model):
     book = models.ForeignKey(
         Book,

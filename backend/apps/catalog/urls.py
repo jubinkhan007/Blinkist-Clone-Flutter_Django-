@@ -6,6 +6,10 @@ from .views import (
     CategoryListView,
     CollectionDetailView,
     CollectionListView,
+    UserAudioQueueClearView,
+    UserAudioQueueDeleteView,
+    UserAudioQueueReorderView,
+    UserAudioQueueView,
     UserLibraryListView,
     UserLibraryToggleView,
 )
@@ -19,5 +23,9 @@ urlpatterns = [
     path('books/<slug:slug>/', BookDetailView.as_view(), name='book_detail'),
     path('library/', UserLibraryListView.as_view(), name='user_library'),
     path('library/<slug:book_slug>/', UserLibraryToggleView.as_view(), name='user_library_toggle'),
+    path('queue/', UserAudioQueueView.as_view(), name='user_audio_queue'),
+    path('queue/clear/', UserAudioQueueClearView.as_view(), name='user_audio_queue_clear'),
+    path('queue/reorder/', UserAudioQueueReorderView.as_view(), name='user_audio_queue_reorder'),
+    path('queue/<slug:book_slug>/', UserAudioQueueDeleteView.as_view(), name='user_audio_queue_delete'),
 ]
 

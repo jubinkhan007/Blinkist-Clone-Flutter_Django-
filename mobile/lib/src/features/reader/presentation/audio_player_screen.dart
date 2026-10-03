@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
 import '../../book/domain/book_models.dart';
 import 'audio_controller.dart';
@@ -18,9 +19,13 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bookAsync = ref.watch(bookDetailProvider(widget.slug));
-    final sectionsAsync = ref.watch(summarySectionsProvider(widget.slug));
     final audioState = ref.watch(audioControllerProvider);
+    final activeSlug = (_initialized && audioState.bookSlug != null)
+        ? audioState.bookSlug!
+        : widget.slug;
+
+    final bookAsync = ref.watch(bookDetailProvider(activeSlug));
+    final sectionsAsync = ref.watch(summarySectionsProvider(activeSlug));
 
     return bookAsync.when(
       data: (book) => sectionsAsync.when(
@@ -38,6 +43,8 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen> {
                   bookId: book.id,
                   bookSlug: book.slug,
                   bookTitle: book.title,
+                  authorName: book.author.name,
+                  coverImageUrl: book.coverImageUrl,
                   sections: sections,
                 );
               }
@@ -595,6 +602,377 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
     );
   }
 
+  void _showQueueSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Consumer(
+        builder: (context, ref, _) {
+          final audioState = ref.watch(audioControllerProvider);
+          final controller = ref.read(audioControllerProvider.notifier);
+          final queue = audioState.queue;
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.92,
+            expand: false,
+            builder: (context, scrollController) {
+              return SafeArea(
+                child: Column(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(top: 12, bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Audio Queue',
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${queue.length} ${queue.length == 1 ? 'summary' : 'summaries'} up next',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          if (queue.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () => controller.clearQueue(),
+                              icon: const Icon(Icons.clear_all, size: 18),
+                              label: const Text('Clear'),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Auto-play switch
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                              .withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.repeat_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Auto-play Next Summary',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    'Advance automatically when summary ends',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch.adaptive(
+                              value: audioState.autoPlayNext,
+                              onChanged: (_) => controller.toggleAutoPlayNext(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Now playing banner
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'NOW PLAYING',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                audioState.bookTitle ?? book.title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (audioState.isPlaying)
+                              Icon(
+                                Icons.graphic_eq_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 20,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    // Queue list or empty state
+                    Expanded(
+                      child: queue.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.queue_music_outlined,
+                                      size: 56,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Queue is empty',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Add summaries from book pages or themed collections to listen continuously.',
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ReorderableListView.builder(
+                              scrollController: scrollController,
+                              buildDefaultDragHandles: false,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              itemCount: queue.length,
+                              onReorder: (oldIndex, newIndex) {
+                                controller.reorderQueue(oldIndex, newIndex);
+                              },
+                              itemBuilder: (context, index) {
+                                final item = queue[index];
+                                final hasCover =
+                                    item.coverImageUrl != null &&
+                                    item.coverImageUrl!.isNotEmpty;
+
+                                return Container(
+                                  key: ValueKey(item.slug),
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant
+                                          .withOpacity(0.5),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    leading: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: hasCover
+                                          ? Image.network(
+                                              resolveServerUrl(
+                                                item.coverImageUrl!,
+                                              ),
+                                              width: 44,
+                                              height: 44,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (_, __, ___) => Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .surfaceContainerHighest,
+                                                    child: const Icon(
+                                                      Icons.book,
+                                                      size: 20,
+                                                    ),
+                                                  ),
+                                            )
+                                          : Container(
+                                              width: 44,
+                                              height: 44,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .surfaceContainerHighest,
+                                              child: const Icon(
+                                                Icons.book,
+                                                size: 20,
+                                              ),
+                                            ),
+                                    ),
+                                    title: Text(
+                                      item.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      '${item.authorName} • ~${item.estimatedMinutes} min',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.play_circle_outline_rounded,
+                                          ),
+                                          tooltip: 'Play Now',
+                                          onPressed: () {
+                                            controller.playQueuedBook(index);
+                                            Navigator.pop(context);
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                            color: Colors.grey,
+                                          ),
+                                          tooltip: 'Remove',
+                                          onPressed: () {
+                                            controller.removeFromQueue(index);
+                                          },
+                                        ),
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: const Icon(
+                                            Icons.drag_handle_rounded,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final audioState = ref.watch(audioControllerProvider);
@@ -642,6 +1020,15 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
         ),
         actions: [
           _buildSleepTimerButton(context, audioState),
+          IconButton(
+            icon: Badge.count(
+              count: audioState.queue.length,
+              isLabelVisible: audioState.queue.isNotEmpty,
+              child: const Icon(Icons.queue_music_rounded),
+            ),
+            tooltip: 'Audio Queue',
+            onPressed: () => _showQueueSheet(context),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 4),
             child: Center(
@@ -851,6 +1238,16 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                         icon: const Icon(Icons.list),
                         tooltip: 'Chapters',
                         onPressed: () => _showChapterDrawer(context),
+                      ),
+                      // Audio Queue
+                      IconButton(
+                        icon: Badge.count(
+                          count: audioState.queue.length,
+                          isLabelVisible: audioState.queue.isNotEmpty,
+                          child: const Icon(Icons.queue_music_rounded),
+                        ),
+                        tooltip: 'Audio Queue',
+                        onPressed: () => _showQueueSheet(context),
                       ),
                     ],
                   ),

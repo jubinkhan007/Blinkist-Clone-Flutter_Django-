@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/networking/api_client.dart';
 import '../../../../core/auth/auth_repository.dart';
+import '../../reader/presentation/reader_options_provider.dart';
 import '../domain/onboarding_models.dart';
 
 const List<OnboardingTopic> kDefaultOnboardingTopics = [

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
+import '../../reader/presentation/audio_controller.dart';
 import '../domain/collection_models.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
@@ -64,7 +65,7 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 }
 
-class _CollectionView extends StatelessWidget {
+class _CollectionView extends ConsumerWidget {
   final CollectionDetail collection;
 
   const _CollectionView({required this.collection});
@@ -83,7 +84,7 @@ class _CollectionView extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accentColor = _parseColor(collection.colorHex);
 
@@ -256,7 +257,7 @@ class _CollectionView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Progress Card
-                  _buildProgressCard(context, accentColor),
+                  _buildProgressCard(context, ref, accentColor),
                   const SizedBox(height: 16),
 
                   // Curriculum Description
@@ -313,7 +314,11 @@ class _CollectionView extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressCard(BuildContext context, Color accentColor) {
+  Widget _buildProgressCard(
+    BuildContext context,
+    WidgetRef ref,
+    Color accentColor,
+  ) {
     final theme = Theme.of(context);
     final completed = collection.completedBooksCount;
     final total = collection.booksCount;
@@ -322,11 +327,14 @@ class _CollectionView extends StatelessWidget {
 
     String motivation;
     if (isDone) {
-      motivation = '🎉 Congratulations! You have completed all books in this collection.';
+      motivation =
+          '🎉 Congratulations! You have completed all books in this collection.';
     } else if (completed > 0) {
-      motivation = '🔥 Keep up the momentum! Finish the next book to build your habit.';
+      motivation =
+          '🔥 Keep up the momentum! Finish the next book to build your habit.';
     } else {
-      motivation = '🚀 Start Day 1 to build this skill. One summary a day leads to mastery.';
+      motivation =
+          '🚀 Start Day 1 to build this skill. One summary a day leads to mastery.';
     }
 
     return Container(
@@ -385,6 +393,68 @@ class _CollectionView extends StatelessWidget {
             motivation,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: collection.items.isEmpty
+                  ? null
+                  : () {
+                      final firstUncompleted = collection.items.firstWhere(
+                        (item) => !item.isCompleted,
+                        orElse: () => collection.items.first,
+                      );
+                      final firstIndex = collection.items.indexOf(
+                        firstUncompleted,
+                      );
+                      final remaining = collection.items
+                          .sublist(firstIndex + 1)
+                          .map(
+                            (item) => QueuedBook(
+                              id: item.book.id,
+                              slug: item.book.slug,
+                              title: item.book.title,
+                              authorName: item.book.author.name,
+                              coverImageUrl: item.book.coverImageUrl,
+                              estimatedMinutes:
+                                  item.book.estimatedReadTimeMinutes,
+                            ),
+                          )
+                          .toList();
+
+                      if (remaining.isNotEmpty) {
+                        ref
+                            .read(audioControllerProvider.notifier)
+                            .addBundleToQueue(remaining);
+                      }
+
+                      context.push(
+                        '/books/${firstUncompleted.book.slug}/listen',
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Playing "${firstUncompleted.book.title}" • ${remaining.length} more in bundle queued for continuous audio',
+                          ),
+                        ),
+                      );
+                    },
+              icon: const Icon(Icons.playlist_play_rounded, size: 22),
+              label: Text(
+                completed > 0 && completed < total
+                    ? 'Resume Bundle Audio (${completed + 1}/$total)'
+                    : 'Play Bundle Continuous Audio',
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ),
         ],

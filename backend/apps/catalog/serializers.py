@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.catalog.models import Author, Book, Category, Collection, CollectionItem
+from apps.catalog.models import Author, Book, Category, Collection, CollectionItem, UserAudioQueueItem
 from apps.summaries.models import SummarySection
 
 def _user_has_premium_access(request) -> bool:
@@ -255,4 +255,12 @@ class CollectionDetailSerializer(serializers.ModelSerializer):
             return 0.0
         completed = self.get_completed_books_count(obj)
         return round(min(100.0, (completed / total) * 100.0), 1)
+
+
+class UserAudioQueueItemSerializer(serializers.ModelSerializer):
+    book = BookListSerializer(read_only=True)
+
+    class Meta:
+        model = UserAudioQueueItem
+        fields = ('id', 'book', 'order', 'added_at')
 

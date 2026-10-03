@@ -9,10 +9,11 @@ import '../../explore/domain/catalog_models.dart';
 import '../../library/data/library_repository.dart';
 import '../../library/data/offline_downloads_service.dart';
 import '../../reader/presentation/ask_book_ai_sheet.dart';
+import '../../reader/presentation/audio_controller.dart';
 import '../data/content_repository.dart';
 import '../domain/book_models.dart';
 
-class _CtaRow extends StatelessWidget {
+class _CtaRow extends ConsumerWidget {
   final BookDetail book;
   final bool isLocked;
   final VoidCallback onUpgrade;
@@ -28,7 +29,7 @@ class _CtaRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasAudio = book.sections.any((s) => s.audioUrl != null);
     final hasPdf =
         book.fullBookPdfUrl != null && book.fullBookPdfUrl!.isNotEmpty;
@@ -74,6 +75,89 @@ class _CtaRow extends StatelessWidget {
                 : null,
           ),
           const SizedBox(height: 8),
+          // Audio Queue CTA
+          if (hasAudio && book.sections.isNotEmpty) ...[
+            Builder(
+              builder: (context) {
+                final audioState = ref.watch(audioControllerProvider);
+                final isInQueue = audioState.queue.any(
+                  (b) => b.slug == book.slug,
+                );
+                final isCurrentPlaying = audioState.bookSlug == book.slug;
+
+                return OutlinedButton.icon(
+                  icon: Icon(
+                    isCurrentPlaying
+                        ? Icons.graphic_eq_rounded
+                        : (isInQueue
+                            ? Icons.playlist_add_check_rounded
+                            : Icons.queue_music_rounded),
+                    color: isCurrentPlaying
+                        ? Theme.of(context).colorScheme.primary
+                        : (isInQueue ? Colors.teal : null),
+                  ),
+                  label: Text(
+                    isCurrentPlaying
+                        ? 'Now Playing in Audio'
+                        : (isInQueue
+                            ? 'In Audio Queue'
+                            : 'Add to Audio Queue'),
+                    style: TextStyle(
+                      color: isCurrentPlaying
+                          ? Theme.of(context).colorScheme.primary
+                          : (isInQueue ? Colors.teal : null),
+                      fontWeight: (isCurrentPlaying || isInQueue)
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  onPressed: () {
+                    if (isCurrentPlaying) {
+                      context.push('/books/${book.slug}/listen');
+                    } else if (isInQueue) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '"${book.title}" is already in your audio queue',
+                          ),
+                          action: SnackBarAction(
+                            label: 'Open Player',
+                            onPressed: () => context.push(
+                              '/books/${audioState.bookSlug ?? book.slug}/listen',
+                            ),
+                          ),
+                        ),
+                      );
+                    } else {
+                      ref.read(audioControllerProvider.notifier).addToQueue(
+                            QueuedBook(
+                              id: book.id,
+                              slug: book.slug,
+                              title: book.title,
+                              authorName: book.author.name,
+                              coverImageUrl: book.coverImageUrl,
+                              estimatedMinutes: book.estimatedReadTimeMinutes,
+                              sections: book.sections,
+                            ),
+                          );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Added "${book.title}" to audio queue'),
+                          action: SnackBarAction(
+                            label: 'View Queue',
+                            onPressed: () => context.push(
+                              '/books/${audioState.bookSlug ?? book.slug}/listen',
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
           // Ask Book AI (Gemini)
           OutlinedButton.icon(
             icon: const Icon(Icons.auto_awesome, color: Colors.amber),
