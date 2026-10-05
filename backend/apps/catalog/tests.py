@@ -558,4 +558,76 @@ class AudioQueueApiTests(APITestCase):
         self.assertEqual(UserAudioQueueItem.objects.filter(user=self.user).count(), 0)
 
 
+class SearchApiTests(APITestCase):
+    def setUp(self):
+        self.author = Author.objects.create(name='Cal Newport')
+        self.category = Category.objects.create(name='Focus & Productivity', slug='focus-productivity')
+        self.book = Book.objects.create(
+            title='Deep Work',
+            subtitle='Rules for Focused Success in a Distracted World',
+            slug='deep-work',
+            author=self.author,
+            description='How to focus without distraction.',
+            what_you_will_learn='Deep work strategies.',
+            rating=4.8,
+        )
+        self.book.categories.add(self.category)
+
+    def test_suggest_empty_query(self):
+        url = reverse('search_suggest')
+        resp = self.client.get(url, {'q': ''})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['suggestions'], [])
+
+    def test_suggest_book_matches(self):
+        url = reverse('search_suggest')
+        resp = self.client.get(url, {'q': 'deep'})
+        self.assertEqual(resp.status_code, 200)
+        suggestions = resp.data['suggestions']
+        self.assertTrue(any(s['type'] == 'book' and s['slug'] == 'deep-work' for s in suggestions))
+
+    def test_suggest_author_matches(self):
+        url = reverse('search_suggest')
+        resp = self.client.get(url, {'q': 'newport'})
+        self.assertEqual(resp.status_code, 200)
+        suggestions = resp.data['suggestions']
+        self.assertTrue(any(s['type'] == 'author' and 'Cal Newport' in s['title'] for s in suggestions))
+
+    def test_suggest_category_matches(self):
+        url = reverse('search_suggest')
+        resp = self.client.get(url, {'q': 'focus'})
+        self.assertEqual(resp.status_code, 200)
+        suggestions = resp.data['suggestions']
+        self.assertTrue(any(s['type'] == 'category' and s['slug'] == 'focus-productivity' for s in suggestions))
+
+    def test_trending_searches(self):
+        url = reverse('search_trending')
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.data, list)
+        self.assertGreater(len(resp.data), 0)
+        self.assertIn('query', resp.data[0])
+        self.assertIn('badge', resp.data[0])
+
+    def test_log_search_query(self):
+        url = reverse('search_log')
+        resp = self.client.post(url, {'query': 'mindfulness'}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['status'], 'logged')
+        self.assertEqual(resp.data['count'], 1)
+
+        # Logging again increments count
+        resp2 = self.client.post(url, {'query': 'mindfulness'}, format='json')
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(resp2.data['count'], 2)
+
+    def test_book_list_search_logs_query(self):
+        from apps.catalog.models import SearchQueryLog
+        url = reverse('book_list')
+        resp = self.client.get(url, {'search': 'deep work'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(SearchQueryLog.objects.filter(query__iexact='deep work').exists())
+
+
+
 

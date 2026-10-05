@@ -173,3 +173,16 @@ class CollectionItem(models.Model):
     def __str__(self):
         return f"{self.collection.title} - #{self.order}: {self.book.title}"
 
+
+class SearchQueryLog(models.Model):
+    query = models.CharField(max_length=255, unique=True, db_index=True)
+    count = models.PositiveIntegerField(default=1)
+    last_searched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-count', '-last_searched_at']
+
+    def __str__(self):
+        return f"{self.query} ({self.count})"
+
+

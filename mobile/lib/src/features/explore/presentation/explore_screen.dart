@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../explore/data/catalog_repository.dart';
 import '../../explore/domain/catalog_models.dart';
 import '../../home/presentation/home_screen.dart';
 import 'search_history_widget.dart';
+import 'search_suggestions_dropdown.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
@@ -131,6 +133,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final colorScheme = theme.colorScheme;
     final categoriesAsync = ref.watch(categoriesProvider);
     final searchHistory = ref.watch(searchHistoryProvider);
+    final trendingSearches =
+        ref.watch(trendingSearchesProvider).valueOrNull ?? [];
 
     final currentFilter = ExploreFilter(
       query: _searchQuery,
@@ -141,8 +145,18 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     );
 
     final searchResultsAsync = ref.watch(filteredBooksProvider(currentFilter));
-    final showRecentSearches =
+    final showRecentAndTrending =
         _searchFocusNode.hasFocus && _searchController.text.trim().isEmpty;
+    final showSuggestions =
+        _searchFocusNode.hasFocus && _searchController.text.trim().isNotEmpty;
+    final isSearchingOverlay = showRecentAndTrending || showSuggestions;
+
+    final suggestionsAsync = showSuggestions
+        ? ref.watch(searchSuggestionsProvider(_searchController.text.trim()))
+        : null;
+    final suggestions = suggestionsAsync?.valueOrNull ?? [];
+    final isSuggestionsLoading = suggestionsAsync?.isLoading ?? false;
+
     final showLoading = _isDebouncing || searchResultsAsync.isLoading;
     final hasActiveFilterRules = currentFilter.hasActiveFilters;
 
@@ -166,11 +180,12 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
+                  textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     hintText: 'Search titles, authors, topics...',
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
+                    fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                     contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -191,22 +206,31 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                     ),
                   ),
                   onTap: () => setState(() {}),
+                  onSubmitted: (value) {
+                    final q = value.trim();
+                    _searchFocusNode.unfocus();
+                    setState(() {
+                      _searchQuery = q;
+                      _isDebouncing = false;
+                    });
+                    if (q.isNotEmpty) {
+                      ref.read(searchHistoryProvider.notifier).add(q);
+                      ref.read(catalogRepositoryProvider).logSearchQuery(q);
+                    }
+                  },
                   onChanged: (value) {
-                    setState(() => _isDebouncing = true);
+                    setState(() {
+                      _isDebouncing = true;
+                    });
                     _debounce?.cancel();
                     _debounce = Timer(
-                      const Duration(milliseconds: 350),
-                      () async {
+                      const Duration(milliseconds: 250),
+                      () {
                         if (!mounted) return;
                         setState(() {
                           _searchQuery = value.trim();
                           _isDebouncing = false;
                         });
-                        if (_searchQuery.isNotEmpty) {
-                          await ref
-                              .read(searchHistoryProvider.notifier)
-                              .add(_searchQuery);
-                        }
                       },
                     );
                   },
@@ -219,17 +243,76 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       ),
       body: CustomScrollView(
         slivers: [
-          // 1. Recent Search History Dropdown
-          if (showRecentSearches)
+          // 1. Live Debounced Search Suggestions Dropdown
+          if (showSuggestions)
+            SearchSuggestionsDropdown(
+              query: _searchController.text.trim(),
+              suggestions: suggestions,
+              isLoading: isSuggestionsLoading,
+              onSelectBook: (slug) {
+                _searchFocusNode.unfocus();
+                final currentText = _searchController.text.trim();
+                if (currentText.isNotEmpty) {
+                  ref.read(searchHistoryProvider.notifier).add(currentText);
+                  ref.read(catalogRepositoryProvider).logSearchQuery(currentText);
+                }
+                context.push('/books/$slug');
+              },
+              onSelectAuthor: (author) {
+                _searchController.text = author;
+                _searchController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: author.length),
+                );
+                _searchFocusNode.unfocus();
+                setState(() {
+                  _searchQuery = author;
+                  _isDebouncing = false;
+                });
+                ref.read(searchHistoryProvider.notifier).add(author);
+                ref.read(catalogRepositoryProvider).logSearchQuery(author);
+              },
+              onSelectCategory: (categorySlug) {
+                _searchFocusNode.unfocus();
+                setState(() {
+                  _selectedCategorySlug = categorySlug;
+                  _isDebouncing = false;
+                });
+              },
+              onSelectQuery: (query) {
+                _searchController.text = query;
+                _searchController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: query.length),
+                );
+                _searchFocusNode.unfocus();
+                setState(() {
+                  _searchQuery = query;
+                  _isDebouncing = false;
+                });
+                ref.read(searchHistoryProvider.notifier).add(query);
+                ref.read(catalogRepositoryProvider).logSearchQuery(query);
+              },
+            ),
+
+          // 2. Recent Searches & Trending Now
+          if (showRecentAndTrending)
             SearchHistoryWidget(
               history: searchHistory,
+              trending: trendingSearches,
               onSelected: (query) {
                 _searchController.text = query;
                 _searchController.selection = TextSelection.fromPosition(
                   TextPosition(offset: query.length),
                 );
                 _searchFocusNode.unfocus();
-                setState(() => _searchQuery = query);
+                setState(() {
+                  _searchQuery = query;
+                  _isDebouncing = false;
+                });
+                ref.read(searchHistoryProvider.notifier).add(query);
+                ref.read(catalogRepositoryProvider).logSearchQuery(query);
+              },
+              onRemove: (query) {
+                ref.read(searchHistoryProvider.notifier).remove(query);
               },
               onClearAll: () =>
                   ref.read(searchHistoryProvider.notifier).clear(),
@@ -346,7 +429,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
 
           // 3. Category Browsing Hub (Visual Topic Grid)
           // Displayed when no search query and 'All Topics' selected
-          if (_searchQuery.isEmpty && _selectedCategorySlug == null && !showRecentSearches)
+          if (_searchQuery.isEmpty && _selectedCategorySlug == null && !isSearchingOverlay)
             categoriesAsync.maybeWhen(
               data: (categories) => SliverToBoxAdapter(
                 child: Padding(
@@ -393,7 +476,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             ),
 
           // 4. Search Results Header & Filter Summary
-          if (!showRecentSearches && (_searchQuery.isNotEmpty || _selectedCategorySlug != null))
+          if (!isSearchingOverlay && (_searchQuery.isNotEmpty || _selectedCategorySlug != null))
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -432,7 +515,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             ),
 
           // 5. Books Results Grid
-          if (!showRecentSearches)
+          if (!isSearchingOverlay)
             searchResultsAsync.when(
               data: (books) {
                 if (books.isEmpty) {

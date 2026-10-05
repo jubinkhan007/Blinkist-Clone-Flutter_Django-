@@ -101,3 +101,62 @@ class Book {
     );
   }
 }
+
+class SearchSuggestion {
+  final String type; // 'book', 'author', 'category', 'query'
+  final String title;
+  final String? subtitle;
+  final String? slug;
+  final String? author;
+  final String? coverImageUrl;
+  final double? rating;
+  final int? bookCount;
+
+  SearchSuggestion({
+    required this.type,
+    required this.title,
+    this.subtitle,
+    this.slug,
+    this.author,
+    this.coverImageUrl,
+    this.rating,
+    this.bookCount,
+  });
+
+  factory SearchSuggestion.fromJson(Map<String, dynamic> json) {
+    return SearchSuggestion(
+      type: json['type'] as String? ?? 'query',
+      title: json['title'] as String? ?? '',
+      subtitle: json['subtitle'] as String?,
+      slug: json['slug'] as String?,
+      author: json['author'] as String?,
+      coverImageUrl: json['cover_image_url'] as String?,
+      rating: (json['rating'] as num?)?.toDouble(),
+      bookCount: (json['book_count'] as num?)?.toInt(),
+    );
+  }
+}
+
+class TrendingSearchItem {
+  final String query;
+  final String type; // 'book', 'category', 'author', 'query'
+  final String badge; // '🔥 Trending', '⚡ Popular', '👤 Top Author'
+  final String? slug;
+
+  TrendingSearchItem({
+    required this.query,
+    this.type = 'query',
+    this.badge = '🔥 Trending',
+    this.slug,
+  });
+
+  factory TrendingSearchItem.fromJson(Map<String, dynamic> json) {
+    return TrendingSearchItem(
+      query: json['query'] as String? ?? '',
+      type: json['type'] as String? ?? 'query',
+      badge: json['badge'] as String? ?? '🔥 Trending',
+      slug: json['slug'] as String?,
+    );
+  }
+}
+

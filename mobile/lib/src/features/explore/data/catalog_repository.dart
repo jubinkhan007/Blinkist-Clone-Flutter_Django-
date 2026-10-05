@@ -55,6 +55,44 @@ class CatalogRepository {
         : (data is List ? data : []);
     return results.map((json) => Book.fromJson(json as Map<String, dynamic>)).toList();
   }
+
+  Future<List<SearchSuggestion>> getSearchSuggestions(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return [];
+    final response = await _dio.get(
+      '/catalog/search/suggest/',
+      queryParameters: {'q': trimmed},
+    );
+    final data = response.data;
+    final List list = (data is Map && data.containsKey('suggestions'))
+        ? data['suggestions']
+        : (data is List ? data : []);
+    return list
+        .map((json) => SearchSuggestion.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<TrendingSearchItem>> getTrendingSearches() async {
+    final response = await _dio.get('/catalog/search/trending/');
+    final dynamic data = response.data;
+    final List list = data is List ? data : [];
+    return list
+        .map((json) => TrendingSearchItem.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> logSearchQuery(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      await _dio.post(
+        '/catalog/search/log/',
+        data: {'query': trimmed},
+      );
+    } catch (_) {
+      // Fire-and-forget log
+    }
+  }
 }
 
 class ExploreFilter {
@@ -179,6 +217,13 @@ class SearchHistoryNotifier extends StateNotifier<List<String>> {
     await _ref.read(sharedPreferencesProvider).setStringList(_key, next);
   }
 
+  Future<void> remove(String query) async {
+    final normalized = query.trim().toLowerCase();
+    final next = state.where((item) => item.trim().toLowerCase() != normalized).toList();
+    state = next;
+    await _ref.read(sharedPreferencesProvider).setStringList(_key, next);
+  }
+
   Future<void> clear() async {
     state = [];
     await _ref.read(sharedPreferencesProvider).remove(_key);
@@ -189,3 +234,14 @@ final searchHistoryProvider =
     StateNotifierProvider<SearchHistoryNotifier, List<String>>((ref) {
       return SearchHistoryNotifier(ref);
     });
+
+final trendingSearchesProvider =
+    FutureProvider<List<TrendingSearchItem>>((ref) async {
+  return ref.watch(catalogRepositoryProvider).getTrendingSearches();
+});
+
+final searchSuggestionsProvider =
+    FutureProvider.family<List<SearchSuggestion>, String>((ref, query) async {
+  return ref.watch(catalogRepositoryProvider).getSearchSuggestions(query);
+});
+

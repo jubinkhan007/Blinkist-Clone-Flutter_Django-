@@ -1,4 +1,9 @@
 from django.urls import path
+from .search_views import (
+    SearchLogQueryView,
+    SearchSuggestView,
+    SearchTrendingView,
+)
 from .views import (
     BookAskAiView,
     BookDetailView,
@@ -15,6 +20,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('search/suggest/', SearchSuggestView.as_view(), name='search_suggest'),
+    path('search/trending/', SearchTrendingView.as_view(), name='search_trending'),
+    path('search/log/', SearchLogQueryView.as_view(), name='search_log'),
     path('categories/', CategoryListView.as_view(), name='category_list'),
     path('collections/', CollectionListView.as_view(), name='collection_list'),
     path('collections/<slug:slug>/', CollectionDetailView.as_view(), name='collection_detail'),

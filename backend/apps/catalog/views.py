@@ -32,6 +32,12 @@ class BookListView(generics.ListAPIView):
     ordering_fields = ['created_at', 'title', 'estimated_read_time_minutes', 'rating']
 
     def get_queryset(self):
+        # Automatically log search queries for trending insights
+        search_term = self.request.query_params.get('search')
+        if search_term:
+            from .search_views import log_search_term
+            log_search_term(search_term)
+
         qs = Book.objects.all().prefetch_related('categories', 'author', 'sections')
 
         # 1. Format Filter: Audio vs Text
