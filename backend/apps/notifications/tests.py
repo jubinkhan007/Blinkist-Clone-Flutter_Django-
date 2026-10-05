@@ -4,9 +4,14 @@ from rest_framework.test import APITestCase
 from django.utils import timezone
 from datetime import date, timedelta
 
-from apps.catalog.models import Book, Author, Category, DailyPick
+from apps.catalog.models import Book, Author, Category, DailyPick, Collection
 from .models import Notification, NotificationPreference
-from .tasks import dispatch_daily_pick_notifications, dispatch_streak_reminder_notifications
+from .tasks import (
+    dispatch_daily_pick_notifications,
+    dispatch_streak_reminder_notifications,
+    dispatch_new_book_notifications,
+    dispatch_collection_notifications,
+)
 
 User = get_user_model()
 
@@ -134,3 +139,75 @@ class NotificationApiTests(APITestCase):
         ).first()
         self.assertIsNotNone(notif)
         self.assertIn('3-day streak', notif.title)
+
+    def test_delete_notification(self):
+        notif = Notification.objects.create(
+            user=self.user,
+            title='Delete Me',
+            message='Dismissable alert',
+        )
+        response = self.client.delete(reverse('notification_delete', kwargs={'pk': notif.id}))
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Notification.objects.filter(id=notif.id).exists())
+
+    def test_delete_notification_cross_user_forbidden(self):
+        other_notif = Notification.objects.create(
+            user=self.other_user,
+            title='Other User Alert',
+            message='Cannot touch this',
+        )
+        response = self.client.delete(reverse('notification_delete', kwargs={'pk': other_notif.id}))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Notification.objects.filter(id=other_notif.id).exists())
+
+    def test_simulate_notification(self):
+        payload = {
+            'notification_type': 'daily_pick',
+            'title': 'Test Deep Link Notification',
+            'message': 'Testing navigation to book detail',
+            'action_url': '/books/deep-work/read',
+        }
+        response = self.client.post(reverse('notification_simulate'), payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['title'], 'Test Deep Link Notification')
+        self.assertEqual(response.data['action_url'], '/books/deep-work/read')
+
+        notif = Notification.objects.filter(user=self.user, title='Test Deep Link Notification').first()
+        self.assertIsNotNone(notif)
+        self.assertEqual(notif.notification_type, Notification.NotificationType.DAILY_PICK)
+
+    def test_dispatch_new_book_task(self):
+        author = Author.objects.create(name='Cal Newport')
+        book = Book.objects.create(
+            title='Deep Work',
+            slug='deep-work',
+            author=author,
+            description='Rules for focused success.',
+        )
+        count = dispatch_new_book_notifications(book.id)
+        self.assertGreaterEqual(count, 1)
+
+        notif = Notification.objects.filter(
+            user=self.user,
+            notification_type=Notification.NotificationType.NEW_BOOK,
+        ).first()
+        self.assertIsNotNone(notif)
+        self.assertIn('Deep Work', notif.title)
+        self.assertEqual(notif.action_url, '/books/deep-work')
+
+    def test_dispatch_collection_task(self):
+        collection = Collection.objects.create(
+            title='Productivity Masterclass',
+            slug='productivity-masterclass',
+            description='Master the art of focused work and peak productivity.',
+        )
+        count = dispatch_collection_notifications(collection.id)
+        self.assertGreaterEqual(count, 1)
+
+        notif = Notification.objects.filter(
+            user=self.user,
+            action_url='/collections/productivity-masterclass',
+        ).first()
+        self.assertIsNotNone(notif)
+        self.assertIn('Productivity Masterclass', notif.title)
+

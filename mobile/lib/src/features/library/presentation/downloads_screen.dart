@@ -17,7 +17,24 @@ import '../data/library_repository.dart';
 import '../data/offline_downloads_service.dart';
 
 class DownloadsScreen extends ConsumerWidget {
-  const DownloadsScreen({super.key});
+  final String? initialTab;
+
+  const DownloadsScreen({super.key, this.initialTab});
+
+  int _resolveTabIndex(String? tab) {
+    if (tab == null) return 0;
+    switch (tab.toLowerCase()) {
+      case 'downloads':
+        return 1;
+      case 'notebook':
+      case 'notes':
+      case 'bookmarks':
+        return 2;
+      case 'books':
+      default:
+        return 0;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,6 +42,8 @@ class DownloadsScreen extends ConsumerWidget {
     final savedBooksAsync = ref.watch(libraryBooksProvider);
 
     return DefaultTabController(
+      key: ValueKey(initialTab),
+      initialIndex: _resolveTabIndex(initialTab),
       length: 3,
       child: Scaffold(
         appBar: AppBar(

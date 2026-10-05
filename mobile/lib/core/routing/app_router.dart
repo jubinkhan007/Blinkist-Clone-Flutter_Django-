@@ -15,6 +15,7 @@ import '../../src/features/subscription/presentation/paywall_screen.dart';
 import '../../src/features/notifications/presentation/notifications_screen.dart';
 import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 import '../../src/features/catalog/presentation/collection_detail_screen.dart';
+import 'deep_link_service.dart';
 
 // Keys for nested navigation
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -24,6 +25,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
+    redirect: (context, state) {
+      final rawPath = state.uri.toString();
+      if (rawPath.startsWith('blinkist:') || rawPath.contains('blinkist.com')) {
+        return DeepLinkService.normalize(rawPath);
+      }
+      return null;
+    },
     routes: [
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -34,11 +42,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
           GoRoute(
             path: '/explore',
-            builder: (context, state) => const ExploreScreen(),
+            builder: (context, state) {
+              return ExploreScreen(
+                initialCategorySlug: state.uri.queryParameters['category'],
+                initialQuery: state.uri.queryParameters['search'] ??
+                    state.uri.queryParameters['q'],
+                initialFormat: state.uri.queryParameters['format'],
+                initialDuration: state.uri.queryParameters['duration'],
+                initialSortBy: state.uri.queryParameters['sort'] ??
+                    state.uri.queryParameters['sort_by'],
+              );
+            },
           ),
           GoRoute(
             path: '/library',
-            builder: (context, state) => const DownloadsScreen(),
+            builder: (context, state) {
+              final tab = state.uri.queryParameters['tab'];
+              return DownloadsScreen(initialTab: tab);
+            },
           ),
           GoRoute(
             path: '/profile',

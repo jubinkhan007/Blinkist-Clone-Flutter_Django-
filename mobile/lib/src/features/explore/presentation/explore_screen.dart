@@ -11,7 +11,20 @@ import 'search_history_widget.dart';
 import 'search_suggestions_dropdown.dart';
 
 class ExploreScreen extends ConsumerStatefulWidget {
-  const ExploreScreen({super.key});
+  final String? initialCategorySlug;
+  final String? initialQuery;
+  final String? initialFormat;
+  final String? initialDuration;
+  final String? initialSortBy;
+
+  const ExploreScreen({
+    super.key,
+    this.initialCategorySlug,
+    this.initialQuery,
+    this.initialFormat,
+    this.initialDuration,
+    this.initialSortBy,
+  });
 
   @override
   ConsumerState<ExploreScreen> createState() => _ExploreScreenState();
@@ -29,6 +42,27 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
 
   Timer? _debounce;
   bool _isDebouncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCategorySlug != null) {
+      _selectedCategorySlug = widget.initialCategorySlug;
+    }
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      _searchQuery = widget.initialQuery!;
+      _searchController.text = widget.initialQuery!;
+    }
+    if (widget.initialFormat != null) {
+      _selectedFormat = widget.initialFormat!;
+    }
+    if (widget.initialDuration != null) {
+      _selectedDuration = widget.initialDuration!;
+    }
+    if (widget.initialSortBy != null) {
+      _selectedSortBy = widget.initialSortBy!;
+    }
+  }
 
   @override
   void dispose() {

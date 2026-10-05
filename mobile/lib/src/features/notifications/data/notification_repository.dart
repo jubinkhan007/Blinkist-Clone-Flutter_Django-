@@ -47,6 +47,26 @@ class NotificationRepository {
     await _dio.post('/notifications/read-all/');
   }
 
+  Future<void> deleteNotification(int id) async {
+    await _dio.delete('/notifications/$id/');
+  }
+
+  Future<AppNotification> simulateNotification({
+    String type = 'system',
+    String? title,
+    String? message,
+    String? actionUrl,
+  }) async {
+    final payload = {
+      'notification_type': type,
+      if (title != null) 'title': title,
+      if (message != null) 'message': message,
+      if (actionUrl != null) 'action_url': actionUrl,
+    };
+    final response = await _dio.post('/notifications/simulate/', data: payload);
+    return AppNotification.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<NotificationPreferences> getPreferences() async {
     try {
       final response = await _dio.get('/notifications/preferences/');

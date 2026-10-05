@@ -85,3 +85,71 @@ def dispatch_streak_reminder_notifications():
                 created_count += 1
 
     return created_count
+
+
+@shared_task
+def dispatch_new_book_notifications(book_id):
+    """Notifies users when a new book summary is added or featured."""
+    from apps.catalog.models import Book
+    try:
+        book = Book.objects.get(id=book_id)
+    except Book.DoesNotExist:
+        return 0
+
+    author_name = book.author.name if book.author else "Featured Author"
+    users = User.objects.filter(is_active=True)
+    created_count = 0
+
+    for user in users:
+        # Avoid duplicate notification for same book
+        already_sent = Notification.objects.filter(
+            user=user,
+            notification_type=Notification.NotificationType.NEW_BOOK,
+            action_url=f"/books/{book.slug}",
+        ).exists()
+
+        if not already_sent:
+            Notification.objects.create(
+                user=user,
+                title=f"📚 New Arrival: {book.title}",
+                message=f"Explore key takeaways from '{book.title}' by {author_name}. Read or listen in 15 minutes!",
+                notification_type=Notification.NotificationType.NEW_BOOK,
+                action_url=f"/books/{book.slug}",
+            )
+            created_count += 1
+
+    return created_count
+
+
+@shared_task
+def dispatch_collection_notifications(collection_id):
+    """Notifies users when a new curated bundle / collection is published."""
+    from apps.catalog.models import Collection
+    try:
+        collection = Collection.objects.get(id=collection_id)
+    except Collection.DoesNotExist:
+        return 0
+
+    users = User.objects.filter(is_active=True)
+    created_count = 0
+    desc_snippet = (collection.description[:80] + "...") if len(collection.description) > 80 else collection.description
+
+    for user in users:
+        already_sent = Notification.objects.filter(
+            user=user,
+            notification_type=Notification.NotificationType.SYSTEM,
+            action_url=f"/collections/{collection.slug}",
+        ).exists()
+
+        if not already_sent:
+            Notification.objects.create(
+                user=user,
+                title=f"✨ Featured Bundle: {collection.title}",
+                message=f"{desc_snippet} Start this curated learning journey now.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                action_url=f"/collections/{collection.slug}",
+            )
+            created_count += 1
+
+    return created_count
+

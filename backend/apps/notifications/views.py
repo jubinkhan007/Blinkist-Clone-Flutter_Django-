@@ -61,3 +61,39 @@ class NotificationPreferenceView(views.APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return response.Response(serializer.data)
+
+
+class NotificationDeleteView(generics.DestroyAPIView):
+    """Allows user to delete a single notification from their inbox."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+
+class SimulateNotificationView(views.APIView):
+    """Developer/testing endpoint to trigger a simulated notification for the current user."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        notification_type = request.data.get('notification_type', Notification.NotificationType.SYSTEM)
+        title = request.data.get('title', '🔔 Test Notification')
+        message = request.data.get('message', 'This is a test notification generated for testing deep linking.')
+        action_url = request.data.get('action_url', '/explore')
+
+        valid_types = [choice[0] for choice in Notification.NotificationType.choices]
+        if notification_type not in valid_types:
+            notification_type = Notification.NotificationType.SYSTEM
+
+        notification = Notification.objects.create(
+            user=request.user,
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            action_url=action_url,
+        )
+        return response.Response(
+            NotificationSerializer(notification).data,
+            status=status.HTTP_201_CREATED,
+        )
+
