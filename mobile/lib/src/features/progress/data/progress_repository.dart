@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/networking/api_client.dart';
 import '../domain/reading_stats_models.dart';
@@ -147,6 +146,23 @@ class ProgressRepository {
     }
   }
 
+  Future<List<UserBadgeItem>> getBadges() async {
+    try {
+      final response = await _dio.get('/progress/badges/');
+      final data = response.data;
+      final list = (data is Map ? data['badges'] : data) as List<dynamic>? ?? [];
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => UserBadgeItem.fromJson(e))
+          .toList();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return [];
+      }
+      rethrow;
+    }
+  }
+
   Future<void> recordActivity() async {
     try {
       await _dio.post('/progress/activity/');
@@ -162,5 +178,9 @@ ProgressRepository progressRepository(ProgressRepositoryRef ref) {
 
 final readingStatsProvider = FutureProvider<UserReadingStats>((ref) async {
   return ref.watch(progressRepositoryProvider).getReadingStats();
+});
+
+final badgesProvider = FutureProvider<List<UserBadgeItem>>((ref) async {
+  return ref.watch(progressRepositoryProvider).getBadges();
 });
 

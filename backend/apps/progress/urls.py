@@ -6,10 +6,12 @@ from .views import (
     FullBookProgressView,
     UserReadingStatsView,
     RecordActivityView,
+    UserBadgesView,
 )
 
 urlpatterns = [
     path('stats/', UserReadingStatsView.as_view(), name='reading_stats'),
+    path('badges/', UserBadgesView.as_view(), name='user_badges'),
     path('activity/', RecordActivityView.as_view(), name='record_activity'),
     path('books/<int:book_id>/', ReadProgressView.as_view(), name='book_progress'),
     path('books/<int:book_id>/section/<int:section_id>/', MarkSectionReadView.as_view(), name='mark_section_read'),

@@ -20,14 +20,21 @@ from .serializers import (
     UserSummaryProgressSerializer,
     UserFullBookProgressSerializer,
 )
+from .badges import evaluate_and_award_badges
 
 
-def record_activity(user):
-    """Utility to register user activity for streak and daily habit tracking."""
+def record_activity(user, reading_minutes=0, audio_minutes=0, sections_read=0, books_completed=0):
+    """Utility to register user activity for streak, daily habit tracking, and reading metrics."""
     if user and user.is_authenticated:
         user.record_reading_activity()
         today = timezone.localdate()
-        UserDailyActivity.objects.get_or_create(user=user, date=today)
+        daily, _ = UserDailyActivity.objects.get_or_create(user=user, date=today)
+        if reading_minutes > 0 or audio_minutes > 0 or sections_read > 0 or books_completed > 0:
+            daily.reading_minutes += reading_minutes
+            daily.audio_minutes += audio_minutes
+            daily.sections_read += sections_read
+            daily.books_completed += books_completed
+            daily.save(update_fields=['reading_minutes', 'audio_minutes', 'sections_read', 'books_completed'])
 
 
 class ReadProgressView(views.APIView):
@@ -72,7 +79,13 @@ class MarkSectionReadView(views.APIView):
         summary_progress.save()
 
         # Record activity for streak tracking
-        record_activity(request.user)
+        is_finished = total_sections > 0 and completed_sections_count >= total_sections
+        record_activity(
+            request.user,
+            reading_minutes=3,
+            sections_read=1,
+            books_completed=1 if is_finished else 0,
+        )
 
         return response.Response(UserSummaryProgressSerializer(summary_progress).data)
 
@@ -91,7 +104,7 @@ class AudioProgressView(views.APIView):
         # Body: { section_id, position_seconds, is_finished }
         book = get_object_or_404(Book, id=book_id)
         section_id = request.data.get('section_id')
-        position_seconds = request.data.get('position_seconds', 0.0)
+        position_seconds = float(request.data.get('position_seconds', 0.0) or 0.0)
         is_finished = request.data.get('is_finished', False)
 
         section = None
@@ -99,13 +112,20 @@ class AudioProgressView(views.APIView):
             section = get_object_or_404(SummarySection, id=section_id, book=book)
 
         progress, _ = UserAudioProgress.objects.get_or_create(user=request.user, book=book)
+        delta_secs = max(0.0, position_seconds - progress.current_position_seconds)
+        audio_mins = int(round(delta_secs / 60.0)) if delta_secs >= 30 else 0
+
         progress.current_section = section
         progress.current_position_seconds = position_seconds
         progress.is_finished = is_finished
         progress.save()
 
-        # Record activity for streak tracking
-        record_activity(request.user)
+        # Record activity for streak tracking and audio minutes
+        record_activity(
+            request.user,
+            audio_minutes=audio_mins,
+            books_completed=1 if is_finished else 0,
+        )
 
         return response.Response(UserAudioProgressSerializer(progress).data)
 
@@ -154,7 +174,7 @@ class RecordActivityView(views.APIView):
 
 
 class UserReadingStatsView(views.APIView):
-    """Returns aggregated gamification metrics, active streak, and weekly habit activity."""
+    """Returns aggregated gamification metrics, period breakdowns, habit heatmap, and badge awards."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -182,24 +202,116 @@ class UserReadingStatsView(views.APIView):
         )['total'] or 0.0
         total_audio_minutes = int(round(audio_secs / 60.0))
 
+        # Reading minutes (from daily activity or fallback estimated at 3 mins / section)
+        daily_read_mins = UserDailyActivity.objects.filter(user=user).aggregate(
+            total=models.Sum('reading_minutes')
+        )['total'] or 0
+        total_reading_minutes = max(daily_read_mins, total_sections_read * 3)
+
         # Highlights count
         from apps.summaries.models import UserHighlight
         total_highlights = UserHighlight.objects.filter(user=user).count()
 
-        # Weekly habit activity (Monday to Sunday of current week)
+        # Weekly habit activity & period stats (Monday to Sunday)
         monday = today - timedelta(days=today.weekday())
+        week_end = monday + timedelta(days=6)
         week_dates = [monday + timedelta(days=i) for i in range(7)]
-        active_dates = set(
-            UserDailyActivity.objects.filter(
-                user=user,
-                date__gte=monday,
-                date__lte=week_dates[-1]
-            ).values_list('date', flat=True)
+
+        week_activities = UserDailyActivity.objects.filter(
+            user=user,
+            date__gte=monday,
+            date__lte=week_end,
         )
-        if user.last_active_date:
+        active_dates = set(week_activities.values_list('date', flat=True))
+        if user.last_active_date and monday <= user.last_active_date <= week_end:
             active_dates.add(user.last_active_date)
 
         weekly_activity = [d in active_dates for d in week_dates]
+
+        week_agg = week_activities.aggregate(
+            read_m=models.Sum('reading_minutes'),
+            aud_m=models.Sum('audio_minutes'),
+            books_c=models.Sum('books_completed'),
+        )
+        weekly_read = week_agg['read_m'] or 0
+        weekly_audio = week_agg['aud_m'] or 0
+        weekly_stats = {
+            'reading_minutes': weekly_read,
+            'audio_minutes': weekly_audio,
+            'total_minutes': weekly_read + weekly_audio,
+            'days_active': len(active_dates),
+            'books_completed': week_agg['books_c'] or 0,
+        }
+
+        # Monthly period stats (First day of current month to today)
+        month_start = today.replace(day=1)
+        month_activities = UserDailyActivity.objects.filter(
+            user=user,
+            date__gte=month_start,
+            date__lte=today,
+        )
+        month_active_dates = set(month_activities.values_list('date', flat=True))
+        if user.last_active_date and month_start <= user.last_active_date <= today:
+            month_active_dates.add(user.last_active_date)
+
+        month_agg = month_activities.aggregate(
+            read_m=models.Sum('reading_minutes'),
+            aud_m=models.Sum('audio_minutes'),
+            books_c=models.Sum('books_completed'),
+        )
+        monthly_read = month_agg['read_m'] or 0
+        monthly_audio = month_agg['aud_m'] or 0
+        monthly_stats = {
+            'reading_minutes': monthly_read,
+            'audio_minutes': monthly_audio,
+            'total_minutes': monthly_read + monthly_audio,
+            'days_active': len(month_active_dates),
+            'books_completed': month_agg['books_c'] or 0,
+        }
+
+        # 84-Day Activity Heatmap (12 full weeks ending today)
+        heatmap_start = today - timedelta(days=83)
+        history_map = {
+            act.date: act for act in UserDailyActivity.objects.filter(
+                user=user,
+                date__gte=heatmap_start,
+                date__lte=today,
+            )
+        }
+
+        activity_heatmap = []
+        for offset in range(84):
+            day_date = heatmap_start + timedelta(days=offset)
+            act = history_map.get(day_date)
+            r_m = act.reading_minutes if act else 0
+            a_m = act.audio_minutes if act else 0
+            tot_m = r_m + a_m
+            b_c = act.books_completed if act else 0
+            is_act = tot_m > 0 or (act is not None) or (user.last_active_date == day_date)
+
+            intensity = 0
+            if is_act:
+                if tot_m <= 10:
+                    intensity = 1
+                elif tot_m <= 25:
+                    intensity = 2
+                else:
+                    intensity = 3
+
+            activity_heatmap.append({
+                'date': day_date.isoformat(),
+                'day_of_week': day_date.weekday(),  # 0 = Mon, 6 = Sun
+                'reading_minutes': r_m,
+                'audio_minutes': a_m,
+                'total_minutes': tot_m,
+                'books_completed': b_c,
+                'intensity': intensity,
+                'is_active': is_act,
+            })
+
+        # Evaluate and unlock achievement badges
+        badges = evaluate_and_award_badges(user)
+        unlocked_badges = [b for b in badges if b['is_unlocked']]
 
         return response.Response({
             'current_streak': user.get_current_streak(today=today),
@@ -209,6 +321,28 @@ class UserReadingStatsView(views.APIView):
             'total_sections_read': total_sections_read,
             'total_books_completed': total_books_completed,
             'total_audio_minutes': total_audio_minutes,
+            'total_reading_minutes': total_reading_minutes,
             'total_highlights': total_highlights,
             'weekly_activity': weekly_activity,
+            'weekly': weekly_stats,
+            'monthly': monthly_stats,
+            'activity_heatmap': activity_heatmap,
+            'unlocked_badges_count': len(unlocked_badges),
+            'total_badges_count': len(badges),
+            'recent_badges': unlocked_badges[:4],
         })
+
+
+class UserBadgesView(views.APIView):
+    """Returns full catalog of achievement badges with user's unlock statuses and progress."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        badges = evaluate_and_award_badges(request.user)
+        unlocked_count = sum(1 for b in badges if b['is_unlocked'])
+        return response.Response({
+            'total_badges': len(badges),
+            'unlocked_count': unlocked_count,
+            'badges': badges,
+        })
+

@@ -86,6 +86,10 @@ class UserDailyActivity(models.Model):
     """Tracks which days a user was active reading/listening, for habit graphs and streak verification."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_activities')
     date = models.DateField(db_index=True)
+    reading_minutes = models.PositiveIntegerField(default=0)
+    audio_minutes = models.PositiveIntegerField(default=0)
+    sections_read = models.PositiveIntegerField(default=0)
+    books_completed = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -93,5 +97,20 @@ class UserDailyActivity(models.Model):
         ordering = ['-date']
 
     def __str__(self):
-        return f"{self.user.email} - {self.date}"
+        return f"{self.user.email} - {self.date} (read: {self.reading_minutes}m, audio: {self.audio_minutes}m)"
+
+
+class UserBadge(models.Model):
+    """Tracks achievement milestone badges unlocked by a user."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='badges')
+    badge_key = models.CharField(max_length=64, db_index=True)
+    unlocked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'badge_key')
+        ordering = ['-unlocked_at']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.badge_key}"
+
 

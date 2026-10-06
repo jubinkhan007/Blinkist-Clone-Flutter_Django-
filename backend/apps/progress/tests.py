@@ -121,3 +121,59 @@ class UserReadingStatsTests(APITestCase):
         self.assertEqual(len(data['weekly_activity']), 7)
         self.assertTrue(any(data['weekly_activity']))
 
+        # Test weekly and monthly period breakdowns
+        self.assertIn('weekly', data)
+        self.assertIn('monthly', data)
+        self.assertGreaterEqual(data['weekly']['total_minutes'], 2)
+        self.assertGreaterEqual(data['monthly']['total_minutes'], 2)
+
+        # Test 84-day activity heatmap
+        self.assertIn('activity_heatmap', data)
+        self.assertEqual(len(data['activity_heatmap']), 84)
+        last_day = data['activity_heatmap'][-1]
+        self.assertTrue(last_day['is_active'])
+        self.assertGreaterEqual(last_day['total_minutes'], 2)
+
+        # Test badges preview in stats
+        self.assertIn('unlocked_badges_count', data)
+        self.assertGreaterEqual(data['unlocked_badges_count'], 1)
+        self.assertIn('recent_badges', data)
+
+    def test_user_badges_endpoint(self):
+        # Trigger some progress
+        self.client.post(
+            reverse('mark_section_read', kwargs={'book_id': self.book.id, 'section_id': self.section1.id})
+        )
+        self.client.post(
+            reverse('audio_progress', kwargs={'book_id': self.book.id}),
+            {'section_id': self.section1.id, 'position_seconds': 60.0, 'is_finished': False},
+            format='json',
+        )
+
+        response = self.client.get(reverse('user_badges'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total_badges'], 17)
+        self.assertGreaterEqual(response.data['unlocked_count'], 2)
+
+        badges_dict = {b['key']: b for b in response.data['badges']}
+        self.assertTrue(badges_dict['first_spark']['is_unlocked'])
+        self.assertTrue(badges_dict['first_listen']['is_unlocked'])
+        self.assertFalse(badges_dict['streak_30']['is_unlocked'])
+        self.assertEqual(badges_dict['streak_30']['progress_percent'], round(1.0 / 30.0, 2))
+
+    def test_book_completion_unlocks_first_blink_badge(self):
+        # Complete all sections of the book
+        self.client.post(
+            reverse('mark_section_read', kwargs={'book_id': self.book.id, 'section_id': self.section1.id})
+        )
+        self.client.post(
+            reverse('mark_section_read', kwargs={'book_id': self.book.id, 'section_id': self.section2.id})
+        )
+
+        response = self.client.get(reverse('user_badges'))
+        self.assertEqual(response.status_code, 200)
+        badges_dict = {b['key']: b for b in response.data['badges']}
+        self.assertTrue(badges_dict['first_blink']['is_unlocked'])
+        self.assertEqual(badges_dict['first_blink']['current_progress'], 1)
+
+

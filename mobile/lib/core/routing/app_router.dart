@@ -15,6 +15,7 @@ import '../../src/features/subscription/presentation/paywall_screen.dart';
 import '../../src/features/notifications/presentation/notifications_screen.dart';
 import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 import '../../src/features/catalog/presentation/collection_detail_screen.dart';
+import '../../src/features/progress/presentation/reading_stats_screen.dart';
 import 'deep_link_service.dart';
 
 // Keys for nested navigation
@@ -140,6 +141,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final slug = state.pathParameters['slug']!;
           return CollectionDetailScreen(slug: slug);
         },
+      ),
+      GoRoute(
+        path: '/stats',
+        builder: (context, state) => const ReadingStatsScreen(),
       ),
     ],
   );

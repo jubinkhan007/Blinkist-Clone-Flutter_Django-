@@ -5,11 +5,8 @@ import '../../../../core/auth/auth_repository.dart';
 import '../../../../core/subscription/subscription_repository.dart';
 import '../../auth/presentation/auth_screen.dart';
 import '../../progress/data/progress_repository.dart';
-import '../../progress/domain/reading_stats_models.dart';
 import '../../notifications/data/notification_repository.dart';
-import '../../notifications/domain/notification_models.dart';
 import '../../onboarding/data/onboarding_repository.dart';
-import '../../onboarding/domain/onboarding_models.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -523,7 +520,7 @@ class _ReadingHabitsAndStatsCard extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
+                        color: Colors.amber.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -544,8 +541,8 @@ class _ReadingHabitsAndStatsCard extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: stats.isActiveToday
-                        ? Colors.amber.withOpacity(0.12)
-                        : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                        ? Colors.amber.withValues(alpha: 0.12)
+                        : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -605,12 +602,12 @@ class _ReadingHabitsAndStatsCard extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: isDone
                                 ? Colors.amber.shade400
-                                : (isToday ? Colors.amber.withOpacity(0.15) : Colors.transparent),
+                                : (isToday ? Colors.amber.withValues(alpha: 0.15) : Colors.transparent),
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: isDone
                                   ? Colors.amber.shade600
-                                  : (isToday ? Colors.amber.shade600 : Colors.grey.withOpacity(0.3)),
+                                  : (isToday ? Colors.amber.shade600 : Colors.grey.withValues(alpha: 0.3)),
                               width: isToday ? 2.0 : 1.0,
                             ),
                           ),
@@ -674,6 +671,64 @@ class _ReadingHabitsAndStatsCard extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+
+                // Badges Preview and Link to Detailed Stats
+                if (stats.recentBadges.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Recent Achievements',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${stats.unlockedBadgesCount}/${stats.totalBadgesCount} Unlocked',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: stats.recentBadges.map((badge) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🏅', style: TextStyle(fontSize: 12)),
+                            const SizedBox(width: 4),
+                            Text(
+                              badge.title,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push('/stats'),
+                    icon: const Icon(Icons.insights_rounded, size: 18),
+                    label: const Text('View Detailed Insights & Badges 🏆'),
+                  ),
                 ),
               ],
             ),
