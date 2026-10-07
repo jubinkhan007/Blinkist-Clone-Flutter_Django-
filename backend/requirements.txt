@@ -24,6 +24,7 @@ Django==4.2.29
 django-environ==0.13.0
 django-filter==25.1
 django-storages==1.14.6
+django-unfold==0.67.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 EbookLib==0.20

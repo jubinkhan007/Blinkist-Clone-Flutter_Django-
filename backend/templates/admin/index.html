@@ -1,0 +1,219 @@
+{% extends 'admin/base.html' %}
+{% load i18n %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Top KPI Metrics Grid -->
+    <div>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary-600 dark:text-primary-400">monitoring</span>
+                Platform Vital Metrics
+            </h2>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'admin:catalog_book_import_json' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-xs transition-colors">
+                    <span class="material-symbols-outlined text-sm">upload_file</span>
+                    Ingest JSON
+                </a>
+                <a href="{% url 'admin:catalog_book_add' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-base-100 dark:bg-base-800 hover:bg-base-200 dark:hover:bg-base-700 text-base-800 dark:text-base-200 border border-base-200 dark:border-base-700 transition-colors">
+                    <span class="material-symbols-outlined text-sm">add</span>
+                    New Book
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <!-- Books KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Total Library</span>
+                    <span class="material-symbols-outlined text-primary-500 text-xl">menu_book</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.total_books|default:"0" }}
+                </div>
+                <div class="mt-2 text-xs text-base-500 dark:text-base-400 flex items-center gap-1">
+                    <span class="inline-block w-2 h-2 rounded-full bg-primary-500"></span>
+                    <span>{{ kpi.free_books }} Free · {{ kpi.premium_books }} Pro</span>
+                </div>
+            </div>
+
+            <!-- Audio Narrations KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Audio Narrations</span>
+                    <span class="material-symbols-outlined text-purple-500 text-xl">graphic_eq</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.audio_sections|default:"0" }} <span class="text-xs font-normal text-base-500">/ {{ kpi.total_sections }}</span>
+                </div>
+                <div class="mt-2 text-xs text-purple-600 dark:purple-400 flex items-center gap-1">
+                    <span class="font-semibold">{{ kpi.audio_coverage_pct }}%</span> audio ({{ kpi.total_audio_hours }}h total)
+                </div>
+            </div>
+
+            <!-- Community & Readers KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Total Readers</span>
+                    <span class="material-symbols-outlined text-blue-500 text-xl">group</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.total_users|default:"0" }}
+                </div>
+                <div class="mt-2 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                    <span class="font-semibold">{{ kpi.premium_users }}</span> Premium Members
+                </div>
+            </div>
+
+            <!-- Active Readers Today KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Active Today</span>
+                    <span class="material-symbols-outlined text-amber-500 text-xl">local_fire_department</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.active_today_count|default:"0" }}
+                </div>
+                <div class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    {{ kpi.today_learning_mins|default:"0" }} mins read & listened
+                </div>
+            </div>
+
+            <!-- Achievements Unlocked KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Badges Earned</span>
+                    <span class="material-symbols-outlined text-emerald-500 text-xl">military_tech</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.total_badges_unlocked|default:"0" }}
+                </div>
+                <div class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+                    Milestones reached
+                </div>
+            </div>
+
+            <!-- Ingestion Pipeline KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>AI Ingestion</span>
+                    <span class="material-symbols-outlined text-indigo-500 text-xl">smart_toy</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.pending_jobs|default:"0" }} <span class="text-xs font-normal text-base-500">pending</span>
+                </div>
+                <div class="mt-2 text-xs {% if kpi.failed_jobs > 0 %}text-rose-600 dark:text-rose-400 font-semibold{% else %}text-base-500{% endif %}">
+                    {{ kpi.failed_jobs }} failed jobs
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Feeds: Recent Activity & Highlights -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Recent Reading & Audio Sessions -->
+        <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-5 shadow-xs">
+            <div class="flex items-center justify-between mb-4 border-b border-base-100 dark:border-base-800 pb-3">
+                <h3 class="text-sm font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary-500 text-base">history</span>
+                    Recent Reader Activity
+                </h3>
+                <a href="{% url 'admin:progress_userdailyactivity_changelist' %}" class="text-xs text-primary-600 hover:text-primary-700">View all</a>
+            </div>
+            <div class="space-y-3">
+                {% for act in recent_activities %}
+                    <div class="flex items-center justify-between text-xs py-1.5 border-b border-base-50 dark:border-base-800/50 last:border-0">
+                        <div class="truncate pr-2">
+                            <span class="font-semibold text-base-800 dark:text-base-200 block truncate">{{ act.user.email }}</span>
+                            <span class="text-base-500">{{ act.date }}</span>
+                        </div>
+                        <div class="text-right whitespace-nowrap">
+                            <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-medium">
+                                📖 {{ act.reading_minutes }}m · 🎧 {{ act.audio_minutes }}m
+                            </span>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-xs text-base-400 py-3 text-center">No recent reading recorded yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recent User Highlights -->
+        <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-5 shadow-xs">
+            <div class="flex items-center justify-between mb-4 border-b border-base-100 dark:border-base-800 pb-3">
+                <h3 class="text-sm font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-amber-500 text-base">format_quote</span>
+                    Latest Highlights & Notes
+                </h3>
+                <a href="{% url 'admin:summaries_userhighlight_changelist' %}" class="text-xs text-primary-600 hover:text-primary-700">View all</a>
+            </div>
+            <div class="space-y-3">
+                {% for hl in recent_highlights %}
+                    <div class="text-xs py-1.5 border-b border-base-50 dark:border-base-800/50 last:border-0">
+                        <div class="font-medium text-base-700 dark:text-base-300 italic truncate mb-1">
+                            "{{ hl.selected_text|truncatechars:65 }}"
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-base-400">
+                            <span class="truncate pr-2 font-medium text-base-500">{{ hl.book.title }}</span>
+                            <span>{{ hl.user.email|truncatechars:18 }}</span>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-xs text-base-400 py-3 text-center">No highlights created yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Trending Searches & Today's Pick -->
+        <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-5 shadow-xs flex flex-col justify-between">
+            <div>
+                <div class="flex items-center justify-between mb-3 border-b border-base-100 dark:border-base-800 pb-2">
+                    <h3 class="text-sm font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-blue-500 text-base">search</span>
+                        Trending Search Queries
+                    </h3>
+                    <a href="{% url 'admin:catalog_searchquerylog_changelist' %}" class="text-xs text-primary-600 hover:text-primary-700">Trends</a>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-5">
+                    {% for term in trending_searches %}
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-base-100 dark:bg-base-800 text-base-700 dark:text-base-300 border border-base-200 dark:border-base-700 font-medium">
+                            {{ term.query }}
+                            <span class="text-[10px] text-base-400 bg-base-200 dark:bg-base-700 px-1 rounded-full">{{ term.count }}</span>
+                        </span>
+                    {% empty %}
+                        <p class="text-xs text-base-400 py-2">No queries logged yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Today's Daily Pick Card -->
+            {% if today_pick %}
+            <div class="mt-2 pt-3 border-t border-base-100 dark:border-base-800 bg-base-50 dark:bg-base-800/40 p-3 rounded-lg flex items-center gap-3">
+                <span class="material-symbols-outlined text-amber-500 text-2xl">star</span>
+                <div class="overflow-hidden">
+                    <div class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Today's Daily Blink</div>
+                    <div class="text-xs font-bold text-base-900 dark:text-base-100 truncate">{{ today_pick.book.title }}</div>
+                    <div class="text-[11px] text-base-500 truncate">{{ today_pick.book.author.name }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- App Registry and Navigation -->
+    <div class="flex flex-col lg:flex-row lg:gap-8 pt-4">
+        <div class="grow">
+            {% include "unfold/helpers/app_list_default.html" %}
+        </div>
+        {% include "unfold/helpers/history.html" %}
+    </div>
+</div>
+{% endblock %}

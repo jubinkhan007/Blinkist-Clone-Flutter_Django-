@@ -172,6 +172,8 @@ BADGE_DEFINITIONS = [
     },
 ]
 
+BADGES = {b['key']: b for b in BADGE_DEFINITIONS}
+
 
 def evaluate_and_award_badges(user):
     """

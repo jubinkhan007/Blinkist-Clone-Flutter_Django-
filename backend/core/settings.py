@@ -40,6 +40,9 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -190,3 +193,165 @@ CANCEL_AT_PERIOD_END = env.bool('CANCEL_AT_PERIOD_END', default=True)
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ── Django Unfold Admin Configuration ─────────────────────────────────────────
+from django.urls import reverse_lazy
+
+UNFOLD = {
+    "SITE_TITLE": "Blinkist Admin",
+    "SITE_HEADER": "Blinkist Command Center",
+    "SITE_SUBHEADER": "Microlearning & Audio Narration Platform",
+    "SITE_URL": "/",
+    "DASHBOARD_CALLBACK": "core.admin_dashboard.dashboard_callback",
+    "COLORS": {
+        "primary": {
+            "50": "#E6FBF2",
+            "100": "#CEF6E4",
+            "200": "#9DEECA",
+            "300": "#6CE5AF",
+            "400": "#3BDD95",
+            "500": "#00A86B",
+            "600": "#00945E",
+            "700": "#007A4E",
+            "800": "#005F3D",
+            "900": "#00472D",
+            "950": "#002B1B",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Catalog & Content",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Books",
+                        "icon": "menu_book",
+                        "link": lambda request: reverse_lazy("admin:catalog_book_changelist"),
+                    },
+                    {
+                        "title": "Authors",
+                        "icon": "person_pin",
+                        "link": lambda request: reverse_lazy("admin:catalog_author_changelist"),
+                    },
+                    {
+                        "title": "Categories",
+                        "icon": "category",
+                        "link": lambda request: reverse_lazy("admin:catalog_category_changelist"),
+                    },
+                    {
+                        "title": "Collections",
+                        "icon": "collections_bookmark",
+                        "link": lambda request: reverse_lazy("admin:catalog_collection_changelist"),
+                    },
+                    {
+                        "title": "Daily Picks",
+                        "icon": "auto_awesome",
+                        "link": lambda request: reverse_lazy("admin:catalog_dailypick_changelist"),
+                    },
+                    {
+                        "title": "Ingestion Pipeline",
+                        "icon": "smart_toy",
+                        "link": lambda request: reverse_lazy("admin:catalog_contentingestionjob_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Audio & Summaries",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Summary Sections",
+                        "icon": "headphones",
+                        "link": lambda request: reverse_lazy("admin:summaries_summarysection_changelist"),
+                    },
+                    {
+                        "title": "User Audio Bookmarks",
+                        "icon": "bookmark",
+                        "link": lambda request: reverse_lazy("admin:summaries_useraudiobookmark_changelist"),
+                    },
+                    {
+                        "title": "User Highlights & Notes",
+                        "icon": "highlight",
+                        "link": lambda request: reverse_lazy("admin:summaries_userhighlight_changelist"),
+                    },
+                    {
+                        "title": "User Audio Queues",
+                        "icon": "queue_music",
+                        "link": lambda request: reverse_lazy("admin:catalog_useraudioqueueitem_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "User Progress & Gamification",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Daily Habit Activities",
+                        "icon": "local_fire_department",
+                        "link": lambda request: reverse_lazy("admin:progress_userdailyactivity_changelist"),
+                    },
+                    {
+                        "title": "Milestone Badges",
+                        "icon": "military_tech",
+                        "link": lambda request: reverse_lazy("admin:progress_userbadge_changelist"),
+                    },
+                    {
+                        "title": "Book Reading Progress",
+                        "icon": "auto_stories",
+                        "link": lambda request: reverse_lazy("admin:progress_userbookprogress_changelist"),
+                    },
+                    {
+                        "title": "Audio Listening Progress",
+                        "icon": "graphic_eq",
+                        "link": lambda request: reverse_lazy("admin:progress_useraudioprogress_changelist"),
+                    },
+                    {
+                        "title": "Saved Libraries",
+                        "icon": "bookmark_added",
+                        "link": lambda request: reverse_lazy("admin:catalog_userlibraryitem_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Users & Access",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "User Accounts",
+                        "icon": "group",
+                        "link": lambda request: reverse_lazy("admin:accounts_user_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Communications & Analytics",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Push Notifications",
+                        "icon": "notifications",
+                        "link": lambda request: reverse_lazy("admin:notifications_notification_changelist"),
+                    },
+                    {
+                        "title": "Notification Preferences",
+                        "icon": "tune",
+                        "link": lambda request: reverse_lazy("admin:notifications_notificationpreference_changelist"),
+                    },
+                    {
+                        "title": "Search Query Trends",
+                        "icon": "troubleshoot",
+                        "link": lambda request: reverse_lazy("admin:catalog_searchquerylog_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
