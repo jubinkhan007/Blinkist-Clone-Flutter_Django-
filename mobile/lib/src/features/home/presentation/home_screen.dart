@@ -11,6 +11,7 @@ import '../../notifications/data/notification_repository.dart';
 import '../../progress/data/progress_repository.dart';
 import '../../progress/domain/reading_stats_models.dart';
 import '../../onboarding/data/onboarding_repository.dart';
+import '../../flashcards/presentation/widgets/daily_recall_card.dart';
 import '../domain/home_models.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -63,6 +64,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             children: [
               if (feed.dailyPick != null)
                 _DailyPickHero(book: feed.dailyPick!),
+              const DailyRecallCard(),
               if (feed.continueReading.isNotEmpty)
                 _ContinueReadingRail(items: feed.continueReading),
               if (feed.collections.isNotEmpty)

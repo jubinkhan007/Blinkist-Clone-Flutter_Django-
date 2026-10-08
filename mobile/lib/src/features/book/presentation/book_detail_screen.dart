@@ -169,6 +169,13 @@ class _CtaRow extends ConsumerWidget {
               authorName: book.author.name,
             ),
           ),
+          const SizedBox(height: 8),
+          // Knowledge Check & Flashcards
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.psychology_outlined),
+            label: const Text('Knowledge Check & Flashcards'),
+            onPressed: () => context.push('/books/${book.slug}/flashcards'),
+          ),
         ],
         const SizedBox(height: 8),
         // Read Full Book (tertiary text link)

@@ -63,3 +63,47 @@ class UserAudioBookmark(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.book.title} @ {self.timestamp_seconds}s"
 
+
+class BookFlashcard(models.Model):
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='flashcards')
+    section = models.ForeignKey(SummarySection, on_delete=models.SET_NULL, null=True, blank=True, related_name='flashcards')
+    front_prompt = models.TextField(help_text="Core question or concept trigger")
+    back_answer = models.TextField(help_text="Clear explanation, principle, or actionable takeaway")
+    key_quote = models.TextField(blank=True, default='', help_text="Direct quote or memorable line from the book")
+    quiz_options = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of choices: [{'text': '...', 'is_correct': True, 'explanation': '...'}]"
+    )
+    order = models.PositiveIntegerField(default=1)
+    is_generated = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.book.title} - Card #{self.order}: {self.front_prompt[:40]}"
+
+
+class UserFlashcardReview(models.Model):
+    STATUS_CHOICES = [
+        ('mastered', 'Mastered'),
+        ('review_later', 'Review Later'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='flashcard_reviews')
+    flashcard = models.ForeignKey(BookFlashcard, on_delete=models.CASCADE, related_name='user_reviews')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='review_later')
+    times_reviewed = models.PositiveIntegerField(default=1)
+    last_reviewed_at = models.DateTimeField(auto_now=True)
+    next_review_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'flashcard')
+        ordering = ['-last_reviewed_at']
+
+    def __str__(self):
+        return f"{self.user.email} - Card {self.flashcard_id}: {self.status}"
+

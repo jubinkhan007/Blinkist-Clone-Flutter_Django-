@@ -3,7 +3,13 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 from unfold.decorators import display
 
-from .models import SummarySection, UserAudioBookmark, UserHighlight
+from .models import (
+    BookFlashcard,
+    SummarySection,
+    UserAudioBookmark,
+    UserFlashcardReview,
+    UserHighlight,
+)
 
 
 @admin.register(SummarySection)
@@ -128,3 +134,69 @@ class UserAudioBookmarkAdmin(ModelAdmin):
     @display(description='Note', boolean=True)
     def has_note(self, obj):
         return bool(obj.note and obj.note.strip())
+
+
+@admin.register(BookFlashcard)
+class BookFlashcardAdmin(ModelAdmin):
+    list_display = (
+        'book',
+        'order',
+        'prompt_preview',
+        'has_quote',
+        'options_count',
+        'is_generated',
+        'created_at',
+    )
+    list_filter = ('is_generated', 'book')
+    search_fields = ('book__title', 'front_prompt', 'back_answer', 'key_quote')
+    raw_id_fields = ('book', 'section')
+    ordering = ('book', 'order')
+
+    @display(description='Prompt')
+    def prompt_preview(self, obj):
+        prompt = obj.front_prompt
+        return prompt[:60] + '...' if len(prompt) > 60 else prompt
+
+    @display(description='Quote', boolean=True)
+    def has_quote(self, obj):
+        return bool(obj.key_quote and obj.key_quote.strip())
+
+    @display(description='Quiz Options')
+    def options_count(self, obj):
+        count = len(obj.quiz_options) if isinstance(obj.quiz_options, list) else 0
+        return format_html(
+            '<span style="padding: 2px 8px; border-radius: 12px; background: #e0f2fe; color: #0284c7; font-weight: 600; font-size: 11px;">📝 {} options</span>',
+            count,
+        )
+
+
+@admin.register(UserFlashcardReview)
+class UserFlashcardReviewAdmin(ModelAdmin):
+    list_display = (
+        'user',
+        'flashcard_preview',
+        'status_badge',
+        'times_reviewed',
+        'last_reviewed_at',
+        'next_review_at',
+    )
+    list_filter = ('status', 'last_reviewed_at')
+    search_fields = ('user__email', 'flashcard__book__title', 'flashcard__front_prompt')
+    raw_id_fields = ('user', 'flashcard')
+    ordering = ('-last_reviewed_at',)
+
+    @display(description='Flashcard')
+    def flashcard_preview(self, obj):
+        title = obj.flashcard.book.title
+        prompt = obj.flashcard.front_prompt
+        return f"{title}: {prompt[:40]}..."
+
+    @display(description='Status')
+    def status_badge(self, obj):
+        if obj.status == 'mastered':
+            return format_html(
+                '<span style="padding: 2px 8px; border-radius: 12px; background: #dcfce7; color: #15803d; font-weight: 600; font-size: 11px;">🟢 Mastered</span>'
+            )
+        return format_html(
+            '<span style="padding: 2px 8px; border-radius: 12px; background: #ffedd5; color: #c2410c; font-weight: 600; font-size: 11px;">🟠 Review Later</span>'
+        )

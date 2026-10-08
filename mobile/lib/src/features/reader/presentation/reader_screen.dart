@@ -1342,7 +1342,64 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 );
                               },
                             ),
-                            const SizedBox(height: 48),
+                            if (index == sections.length - 1) ...[
+                              const SizedBox(height: 32),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer
+                                      .withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 38,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'Summary Complete! 🎉',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Strengthen your retention with 3-minute active recall flashcards.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: textColor.withValues(alpha: 0.75),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    FilledButton.icon(
+                                      icon: const Icon(Icons.psychology_outlined),
+                                      label: const Text('Test Your Knowledge 🧠'),
+                                      onPressed: () => context.push(
+                                        '/books/${widget.slug}/flashcards',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 48),
+                            ] else ...[
+                              const SizedBox(height: 48),
+                            ],
                           ],
                         ),
                       );

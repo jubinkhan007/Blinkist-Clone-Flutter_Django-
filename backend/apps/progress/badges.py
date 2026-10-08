@@ -170,6 +170,34 @@ BADGE_DEFINITIONS = [
         'target': 1,
         'metric': 'weekend_activity',
     },
+    # Retention & Active Recall
+    {
+        'key': 'first_recall',
+        'title': 'Quick Recall',
+        'description': 'Mastered your first active recall flashcard.',
+        'category': 'retention',
+        'icon': 'psychology',
+        'target': 1,
+        'metric': 'flashcards_mastered',
+    },
+    {
+        'key': 'recall_master_10',
+        'title': 'Retention Pro',
+        'description': 'Mastered 10 key insights with active recall.',
+        'category': 'retention',
+        'icon': 'school',
+        'target': 10,
+        'metric': 'flashcards_mastered',
+    },
+    {
+        'key': 'retention_ace_25',
+        'title': 'Knowledge Ace',
+        'description': 'Mastered 25 flashcards across your library.',
+        'category': 'retention',
+        'icon': 'workspace_premium',
+        'target': 25,
+        'metric': 'flashcards_mastered',
+    },
 ]
 
 BADGES = {b['key']: b for b in BADGE_DEFINITIONS}
@@ -218,12 +246,17 @@ def evaluate_and_award_badges(user):
             has_weekend_activity = True
             break
 
+    # Flashcards mastered
+    from apps.summaries.models import UserFlashcardReview
+    flashcards_mastered = UserFlashcardReview.objects.filter(user=user, status='mastered').count()
+
     metrics_map = {
         'longest_streak': longest_streak,
         'books_completed': books_completed,
         'audio_minutes': audio_minutes,
         'highlights_count': highlights_count,
         'weekend_activity': 1 if has_weekend_activity else 0,
+        'flashcards_mastered': flashcards_mastered,
     }
 
     # 2. Existing unlocked badges

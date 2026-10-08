@@ -1110,6 +1110,13 @@ class _NotebookTabState extends ConsumerState<_NotebookTab> {
                           ),
                           if (group.slug.isNotEmpty) ...[
                             IconButton(
+                              icon: const Icon(Icons.psychology_outlined, size: 20),
+                              tooltip: 'Recall Flashcards',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  context.push('/books/${group.slug}/flashcards'),
+                            ),
+                            IconButton(
                               icon: const Icon(Icons.menu_book_rounded, size: 20),
                               tooltip: 'Read Summary',
                               visualDensity: VisualDensity.compact,

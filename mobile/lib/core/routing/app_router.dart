@@ -16,6 +16,7 @@ import '../../src/features/notifications/presentation/notifications_screen.dart'
 import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 import '../../src/features/catalog/presentation/collection_detail_screen.dart';
 import '../../src/features/progress/presentation/reading_stats_screen.dart';
+import '../../src/features/flashcards/presentation/flashcard_study_screen.dart';
 import 'deep_link_service.dart';
 
 // Keys for nested navigation
@@ -105,6 +106,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final slug = state.pathParameters['slug']!;
           return FullBookScreen(slug: slug);
+        },
+      ),
+      GoRoute(
+        path: '/books/:slug/flashcards',
+        builder: (context, state) {
+          final slug = state.pathParameters['slug']!;
+          return FlashcardStudyScreen(bookSlug: slug);
+        },
+      ),
+      GoRoute(
+        path: '/flashcards/daily',
+        builder: (context, state) {
+          return const FlashcardStudyScreen(isDailyReview: true);
         },
       ),
       GoRoute(
