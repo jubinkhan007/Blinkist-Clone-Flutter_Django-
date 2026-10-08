@@ -40,6 +40,18 @@ class HighlightRepository {
     return UserHighlight.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<UserHighlight> updateHighlight({
+    required int id,
+    String? note,
+    String? color,
+  }) async {
+    final Map<String, dynamic> data = {};
+    if (note != null) data['note'] = note;
+    if (color != null) data['color'] = color;
+    final response = await _dio.patch('/highlights/$id/', data: data);
+    return UserHighlight.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<void> deleteHighlight(int id) async {
     await _dio.delete('/highlights/$id/');
   }

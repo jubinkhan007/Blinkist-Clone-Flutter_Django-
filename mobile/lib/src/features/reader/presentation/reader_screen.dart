@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../book/data/content_repository.dart';
@@ -23,9 +25,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   final PageController _pageController = PageController();
   int _currentIndex = 0;
   bool _restoredProgress = false;
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  void _disposeRecognizers() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
 
   @override
   void dispose() {
+    _disposeRecognizers();
     _pageController.dispose();
     super.dispose();
   }
@@ -81,6 +92,69 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  Color _getHighlightSolidColor(String colorName) {
+    switch (colorName.toLowerCase()) {
+      case 'green':
+        return const Color(0xFF2E7D32);
+      case 'blue':
+        return const Color(0xFF1976D2);
+      case 'pink':
+        return const Color(0xFFC2185B);
+      case 'yellow':
+      default:
+        return const Color(0xFFF57F17);
+    }
+  }
+
+  Future<void> _quickHighlight({
+    required String color,
+    required String selectedText,
+    required dynamic book,
+    required dynamic section,
+  }) async {
+    final trimmed = selectedText.trim();
+    if (trimmed.isEmpty) return;
+
+    try {
+      await ref.read(highlightRepositoryProvider).createHighlight(
+            bookSlug: book.slug,
+            sectionId: section.id,
+            selectedText: trimmed,
+            note: '',
+            color: color,
+          );
+      ref.invalidate(bookHighlightsProvider(book.slug));
+      ref.invalidate(userHighlightsProvider);
+
+      if (mounted) {
+        final colorName = color[0].toUpperCase() + color.substring(1);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Highlighted in $colorName! Tap it to attach a note.'),
+            duration: const Duration(seconds: 2),
+            action: SnackBarAction(
+              label: 'Add Note',
+              onPressed: () {
+                _showHighlightModal(
+                  context,
+                  book: book,
+                  section: section,
+                  selectedText: trimmed,
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save highlight: $e')),
+        );
+      }
+    }
+  }
+
   void _showHighlightModal(
     BuildContext context, {
     required dynamic book,
@@ -94,7 +168,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => Padding(
@@ -227,6 +301,475 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  void _showHighlightDetailModal(
+    BuildContext context, {
+    required UserHighlight highlight,
+    required dynamic book,
+    required dynamic section,
+  }) {
+    String currentColor = highlight.color;
+    final noteController = TextEditingController(text: highlight.note);
+    bool isEditingNote = highlight.note.trim().isEmpty;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _getHighlightSolidColor(currentColor),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Highlight & Margin Note',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _getHighlightColor(currentColor),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left: BorderSide(
+                      color: _getHighlightSolidColor(currentColor),
+                      width: 4,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  highlight.selectedText.trim(),
+                  style: const TextStyle(
+                    fontStyle: FontStyle.italic,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Highlight Color:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  Row(
+                    children: [
+                      for (final c in ['yellow', 'green', 'blue', 'pink']) ...[
+                        GestureDetector(
+                          onTap: () async {
+                            setModalState(() => currentColor = c);
+                            try {
+                              await ref
+                                  .read(highlightRepositoryProvider)
+                                  .updateHighlight(id: highlight.id, color: c);
+                              ref.invalidate(bookHighlightsProvider(widget.slug));
+                              ref.invalidate(userHighlightsProvider);
+                            } catch (e) {
+                              debugPrint('Failed to update color: $e');
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: _getHighlightSolidColor(c),
+                              shape: BoxShape.circle,
+                              border: currentColor == c
+                                  ? Border.all(color: Colors.black87, width: 2.5)
+                                  : null,
+                            ),
+                            child: currentColor == c
+                                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Margin Note 📝',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              if (isEditingNote) ...[
+                TextField(
+                  controller: noteController,
+                  autofocus: highlight.note.trim().isEmpty,
+                  decoration: InputDecoration(
+                    hintText: 'Write your thoughts, reflections, or action items...',
+                    hintStyle: const TextStyle(fontSize: 13),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonalIcon(
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('Save Note'),
+                    onPressed: () async {
+                      final newNote = noteController.text.trim();
+                      try {
+                        await ref
+                            .read(highlightRepositoryProvider)
+                            .updateHighlight(id: highlight.id, note: newNote);
+                        ref.invalidate(bookHighlightsProvider(widget.slug));
+                        ref.invalidate(userHighlightsProvider);
+                        setModalState(() => isEditingNote = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Margin note updated!'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Could not save note: $e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              ] else ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.notes_rounded, size: 18, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          noteController.text.trim(),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        onPressed: () => setModalState(() => isEditingNote = true),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.palette_outlined, size: 16),
+                      label: const Text('Quote Card'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        QuoteCardDialog.show(
+                          context,
+                          quoteText: highlight.selectedText,
+                          bookTitle: book.title,
+                          bookAuthor: book.author.name,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy'),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: highlight.selectedText));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Copied quote to clipboard'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Remove Highlight?'),
+                          content: const Text(
+                            'Are you sure you want to delete this highlight and its margin note?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.red,
+                              ),
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirm == true && ctx.mounted) {
+                        Navigator.pop(ctx);
+                        try {
+                          await ref
+                              .read(highlightRepositoryProvider)
+                              .deleteHighlight(highlight.id);
+                          ref.invalidate(bookHighlightsProvider(widget.slug));
+                          ref.invalidate(userHighlightsProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Highlight deleted.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to delete: $e')),
+                            );
+                          }
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showChapterNotesSheet(
+    BuildContext context,
+    List<UserHighlight> chapterHighlights,
+    dynamic book,
+    dynamic section,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.35,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (ctx, scrollController) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Chapter Notes & Highlights',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      Text(
+                        section.title,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: chapterHighlights.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (ctx, idx) {
+                    final h = chapterHighlights[idx];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _showHighlightDetailModal(
+                          context,
+                          highlight: h,
+                          book: book,
+                          section: section,
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _getHighlightColor(h.color),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border(
+                            left: BorderSide(
+                              color: _getHighlightSolidColor(h.color),
+                              width: 4,
+                            ),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              h.selectedText.trim(),
+                              style: const TextStyle(
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (h.note.trim().isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.06),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.notes_rounded,
+                                      size: 14,
+                                      color: Colors.black87,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        h.note.trim(),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _colorOption(
     String name,
     Color color,
@@ -253,10 +796,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   TextSpan _buildHighlightedTextSpan({
+    required BuildContext context,
+    required dynamic book,
+    required dynamic section,
     required String fullText,
     required List<UserHighlight> sectionHighlights,
     required TextStyle baseStyle,
   }) {
+    _disposeRecognizers();
+
     if (sectionHighlights.isEmpty) {
       return TextSpan(text: fullText, style: baseStyle);
     }
@@ -301,12 +849,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ));
       }
 
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => _showHighlightDetailModal(
+              context,
+              highlight: h,
+              book: book,
+              section: section,
+            );
+      _recognizers.add(recognizer);
+
       spans.add(TextSpan(
         text: fullText.substring(start, end),
+        recognizer: recognizer,
         style: baseStyle.copyWith(
           backgroundColor: _getHighlightColor(h.color),
+          decoration: h.note.trim().isNotEmpty ? TextDecoration.underline : null,
+          decorationColor: _getHighlightSolidColor(h.color),
+          decorationStyle: TextDecorationStyle.dotted,
         ),
       ));
+
+      if (h.note.trim().isNotEmpty) {
+        spans.add(TextSpan(
+          text: ' 📝',
+          recognizer: recognizer,
+          style: TextStyle(
+            fontSize: (baseStyle.fontSize ?? 16) * 0.75,
+          ),
+        ));
+      }
 
       currentIndex = end;
     }
@@ -579,67 +1150,195 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 fontFamily: readerOptions.fontFamily,
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            SelectableText.rich(
-                              _buildHighlightedTextSpan(
-                                fullText: section.content!,
-                                sectionHighlights: highlights
+                            Builder(
+                              builder: (context) {
+                                final sectionHighlights = highlights
                                     .where((h) =>
                                         h.sectionId == section.id ||
                                         section.content!
                                             .contains(h.selectedText.trim()))
-                                    .toList(),
-                                baseStyle: TextStyle(
-                                  fontSize: readerOptions.fontSize,
-                                  height: 1.6,
-                                  color: textColor,
-                                  fontFamily: readerOptions.fontFamily,
-                                ),
-                              ),
-                              contextMenuBuilder: (context, editableTextState) {
-                                final textEditingValue =
-                                    editableTextState.textEditingValue;
-                                final selectedText = textEditingValue.selection
-                                    .textInside(textEditingValue.text);
-                                final buttonItems =
-                                    editableTextState.contextMenuButtonItems;
+                                    .toList();
+                                final noteCount = sectionHighlights
+                                    .where((h) => h.note.trim().isNotEmpty)
+                                    .length;
 
-                                if (selectedText.trim().isNotEmpty) {
-                                  buttonItems.insert(
-                                    0,
-                                    ContextMenuButtonItem(
-                                      label: 'Highlight ✍️',
-                                      onPressed: () {
-                                        editableTextState.hideToolbar();
-                                        _showHighlightModal(
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (sectionHighlights.isNotEmpty) ...[
+                                      const SizedBox(height: 10),
+                                      InkWell(
+                                        onTap: () => _showChapterNotesSheet(
                                           context,
-                                          book: book,
-                                          section: section,
-                                          selectedText: selectedText,
+                                          sectionHighlights,
+                                          book,
+                                          section,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withValues(alpha: 0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.25),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.edit_note,
+                                                size: 16,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                '${sectionHighlights.length} ${sectionHighlights.length == 1 ? 'highlight' : 'highlights'}${noteCount > 0 ? ' · $noteCount notes' : ''}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                Icons.chevron_right,
+                                                size: 14,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 24),
+                                    SelectableText.rich(
+                                      _buildHighlightedTextSpan(
+                                        context: context,
+                                        book: book,
+                                        section: section,
+                                        fullText: section.content!,
+                                        sectionHighlights: sectionHighlights,
+                                        baseStyle: TextStyle(
+                                          fontSize: readerOptions.fontSize,
+                                          height: 1.6,
+                                          color: textColor,
+                                          fontFamily: readerOptions.fontFamily,
+                                        ),
+                                      ),
+                                      contextMenuBuilder:
+                                          (context, editableTextState) {
+                                        final textEditingValue =
+                                            editableTextState.textEditingValue;
+                                        final selectedText = textEditingValue
+                                            .selection
+                                            .textInside(textEditingValue.text);
+                                        final buttonItems = editableTextState
+                                            .contextMenuButtonItems;
+
+                                        if (selectedText.trim().isNotEmpty) {
+                                          buttonItems.insertAll(0, [
+                                            ContextMenuButtonItem(
+                                              label: '🟡',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                _quickHighlight(
+                                                  color: 'yellow',
+                                                  selectedText: selectedText,
+                                                  book: book,
+                                                  section: section,
+                                                );
+                                              },
+                                            ),
+                                            ContextMenuButtonItem(
+                                              label: '🟢',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                _quickHighlight(
+                                                  color: 'green',
+                                                  selectedText: selectedText,
+                                                  book: book,
+                                                  section: section,
+                                                );
+                                              },
+                                            ),
+                                            ContextMenuButtonItem(
+                                              label: '🔵',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                _quickHighlight(
+                                                  color: 'blue',
+                                                  selectedText: selectedText,
+                                                  book: book,
+                                                  section: section,
+                                                );
+                                              },
+                                            ),
+                                            ContextMenuButtonItem(
+                                              label: '🌸',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                _quickHighlight(
+                                                  color: 'pink',
+                                                  selectedText: selectedText,
+                                                  book: book,
+                                                  section: section,
+                                                );
+                                              },
+                                            ),
+                                            ContextMenuButtonItem(
+                                              label: 'Note 📝',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                _showHighlightModal(
+                                                  context,
+                                                  book: book,
+                                                  section: section,
+                                                  selectedText: selectedText,
+                                                );
+                                              },
+                                            ),
+                                            ContextMenuButtonItem(
+                                              label: 'Quote Card 🎨',
+                                              onPressed: () {
+                                                editableTextState.hideToolbar();
+                                                QuoteCardDialog.show(
+                                                  context,
+                                                  quoteText: selectedText,
+                                                  bookTitle: book.title,
+                                                  bookAuthor: book.author.name,
+                                                );
+                                              },
+                                            ),
+                                          ]);
+                                        }
+
+                                        return AdaptiveTextSelectionToolbar
+                                            .buttonItems(
+                                          anchors: editableTextState
+                                              .contextMenuAnchors,
+                                          buttonItems: buttonItems,
                                         );
                                       },
                                     ),
-                                  );
-                                  buttonItems.insert(
-                                    1,
-                                    ContextMenuButtonItem(
-                                      label: 'Quote Card 🎨',
-                                      onPressed: () {
-                                        editableTextState.hideToolbar();
-                                        QuoteCardDialog.show(
-                                          context,
-                                          quoteText: selectedText,
-                                          bookTitle: book.title,
-                                          bookAuthor: book.author.name,
-                                        );
-                                      },
-                                    ),
-                                  );
-                                }
-
-                                return AdaptiveTextSelectionToolbar.buttonItems(
-                                  anchors: editableTextState.contextMenuAnchors,
-                                  buttonItems: buttonItems,
+                                  ],
                                 );
                               },
                             ),
