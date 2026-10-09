@@ -100,6 +100,25 @@ class Book {
       hasAudio: json['has_audio'] ?? false,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'subtitle': subtitle,
+      'slug': slug,
+      'author': author.toJson(),
+      'categories': categories.map((c) => c.toJson()).toList(),
+      'cover_image_url': coverImageUrl,
+      'estimated_read_time_minutes': estimatedReadTimeMinutes,
+      'is_premium': isPremium,
+      'is_saved': isSaved,
+      'is_daily_free': isDailyFree,
+      'rating': rating,
+      'rating_count': ratingCount,
+      'has_audio': hasAudio,
+    };
+  }
 }
 
 class SearchSuggestion {

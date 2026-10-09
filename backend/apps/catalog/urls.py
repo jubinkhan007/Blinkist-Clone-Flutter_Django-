@@ -4,6 +4,16 @@ from .search_views import (
     SearchSuggestView,
     SearchTrendingView,
 )
+from .reading_list_views import (
+    SharedReadingListCloneView,
+    SharedReadingListDetailView,
+    UserReadingListAddBookView,
+    UserReadingListDetailView,
+    UserReadingListListView,
+    UserReadingListMembershipView,
+    UserReadingListRemoveBookView,
+    UserReadingListReorderView,
+)
 from .views import (
     BookAskAiView,
     BookDetailView,
@@ -35,5 +45,15 @@ urlpatterns = [
     path('queue/clear/', UserAudioQueueClearView.as_view(), name='user_audio_queue_clear'),
     path('queue/reorder/', UserAudioQueueReorderView.as_view(), name='user_audio_queue_reorder'),
     path('queue/<slug:book_slug>/', UserAudioQueueDeleteView.as_view(), name='user_audio_queue_delete'),
+
+    # User Reading Lists & Spaces
+    path('spaces/', UserReadingListListView.as_view(), name='user_reading_lists'),
+    path('spaces/membership/', UserReadingListMembershipView.as_view(), name='user_reading_list_membership'),
+    path('spaces/<int:pk>/', UserReadingListDetailView.as_view(), name='user_reading_list_detail'),
+    path('spaces/<int:pk>/books/', UserReadingListAddBookView.as_view(), name='user_reading_list_add_book'),
+    path('spaces/<int:pk>/books/<slug:book_slug>/', UserReadingListRemoveBookView.as_view(), name='user_reading_list_remove_book'),
+    path('spaces/<int:pk>/reorder/', UserReadingListReorderView.as_view(), name='user_reading_list_reorder'),
+    path('spaces/share/<uuid:token>/', SharedReadingListDetailView.as_view(), name='shared_reading_list_detail'),
+    path('spaces/share/<uuid:token>/clone/', SharedReadingListCloneView.as_view(), name='shared_reading_list_clone'),
 ]
 

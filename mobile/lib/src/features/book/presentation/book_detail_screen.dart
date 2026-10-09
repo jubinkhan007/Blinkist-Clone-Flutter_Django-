@@ -8,6 +8,7 @@ import '../../../../core/subscription/subscription_repository.dart';
 import '../../explore/domain/catalog_models.dart';
 import '../../library/data/library_repository.dart';
 import '../../library/data/offline_downloads_service.dart';
+import '../../library/presentation/widgets/add_to_space_sheet.dart';
 import '../../reader/presentation/ask_book_ai_sheet.dart';
 import '../../reader/presentation/audio_controller.dart';
 import '../data/content_repository.dart';
@@ -256,6 +257,26 @@ class BookDetailScreen extends ConsumerWidget {
                       bookSlug: book.slug,
                       bookTitle: book.title,
                       authorName: book.author.name,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Add to Space',
+                    icon: const Icon(Icons.playlist_add_rounded),
+                    onPressed: () => AddToSpaceSheet.show(
+                      context,
+                      book: Book(
+                        id: book.id,
+                        title: book.title,
+                        subtitle: book.subtitle,
+                        slug: book.slug,
+                        author: book.author,
+                        categories: book.categories,
+                        coverImageUrl: book.coverImageUrl,
+                        estimatedReadTimeMinutes: book.estimatedReadTimeMinutes,
+                        isPremium: book.isPremium,
+                        isSaved: saved,
+                        isDailyFree: book.isDailyFree,
+                      ),
                     ),
                   ),
                   IconButton(

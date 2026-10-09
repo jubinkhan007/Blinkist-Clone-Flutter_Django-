@@ -17,6 +17,7 @@ import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 import '../../src/features/catalog/presentation/collection_detail_screen.dart';
 import '../../src/features/progress/presentation/reading_stats_screen.dart';
 import '../../src/features/flashcards/presentation/flashcard_study_screen.dart';
+import '../../src/features/library/presentation/space_detail_screen.dart';
 import 'deep_link_service.dart';
 
 // Keys for nested navigation
@@ -119,6 +120,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/flashcards/daily',
         builder: (context, state) {
           return const FlashcardStudyScreen(isDailyReview: true);
+        },
+      ),
+      GoRoute(
+        path: '/spaces/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          final token = state.uri.queryParameters['token'];
+          return SpaceDetailScreen(spaceId: id, token: token);
+        },
+      ),
+      GoRoute(
+        path: '/spaces/share/:token',
+        builder: (context, state) {
+          final token = state.pathParameters['token']!;
+          return SpaceDetailScreen(shareToken: token);
         },
       ),
       GoRoute(

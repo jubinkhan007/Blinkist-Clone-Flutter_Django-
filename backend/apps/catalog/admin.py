@@ -27,6 +27,8 @@ from .models import (
     SearchQueryLog,
     UserAudioQueueItem,
     UserLibraryItem,
+    UserReadingList,
+    UserReadingListItem,
 )
 
 
@@ -452,3 +454,69 @@ class SearchQueryLogAdmin(ModelAdmin):
             '<span style="display: inline-block; padding: 2px 8px; border-radius: 12px; background: #ecfdf5; color: #047857; font-weight: 600; font-size: 11px;">{} searches</span>',
             obj.count,
         )
+
+
+class UserReadingListItemInline(TabularInline):
+    model = UserReadingListItem
+    extra = 0
+    raw_id_fields = ('book',)
+    fields = ('order', 'book', 'note', 'added_at')
+    readonly_fields = ('added_at',)
+    ordering = ('order',)
+
+
+@admin.register(UserReadingList)
+class UserReadingListAdmin(ModelAdmin):
+    list_display = (
+        'emoji_title',
+        'user',
+        'color_badge',
+        'books_count',
+        'is_public_badge',
+        'created_at',
+        'updated_at',
+    )
+    list_filter = ('is_public', 'created_at', 'updated_at')
+    search_fields = ('title', 'description', 'user__email', 'user__username')
+    raw_id_fields = ('user',)
+    inlines = [UserReadingListItemInline]
+    readonly_fields = ('share_token', 'created_at', 'updated_at')
+
+    @display(description='Space Title')
+    def emoji_title(self, obj):
+        return f"{obj.emoji} {obj.title}"
+
+    @display(description='Accent')
+    def color_badge(self, obj):
+        return format_html(
+            '<span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background-color: {}; vertical-align: middle; margin-right: 4px;"></span> {}',
+            obj.color_hex,
+            obj.color_hex,
+        )
+
+    @display(description='Books')
+    def books_count(self, obj):
+        count = obj.items.count()
+        return format_html(
+            '<span style="display: inline-block; padding: 2px 8px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; font-weight: 600; font-size: 11px;">📚 {} books</span>',
+            count,
+        )
+
+    @display(description='Access')
+    def is_public_badge(self, obj):
+        if obj.is_public:
+            return format_html(
+                '<span style="display: inline-block; padding: 2px 8px; border-radius: 12px; background: #ecfdf5; color: #047857; font-weight: 600; font-size: 11px;">🌐 Public</span>'
+            )
+        return format_html(
+            '<span style="display: inline-block; padding: 2px 8px; border-radius: 12px; background: #f3f4f6; color: #4b5563; font-weight: 600; font-size: 11px;">🔒 Private</span>'
+        )
+
+
+@admin.register(UserReadingListItem)
+class UserReadingListItemAdmin(ModelAdmin):
+    list_display = ('reading_list', 'order', 'book', 'note', 'added_at')
+    list_filter = ('added_at',)
+    search_fields = ('reading_list__title', 'book__title', 'note')
+    raw_id_fields = ('reading_list', 'book')
+    ordering = ('reading_list', 'order')

@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.utils import timezone
 from apps.accounts.models import User
@@ -184,5 +185,73 @@ class SearchQueryLog(models.Model):
 
     def __str__(self):
         return f"{self.query} ({self.count})"
+
+
+class UserReadingList(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='reading_lists',
+    )
+    title = models.CharField(max_length=150)
+    description = models.TextField(blank=True, default='')
+    emoji = models.CharField(max_length=10, default='📚')
+    color_hex = models.CharField(max_length=7, default='#3B82F6')
+    is_public = models.BooleanField(default=False)
+    share_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at', '-created_at']
+
+    def __str__(self):
+        return f"{self.emoji} {self.title} ({self.user.email})"
+
+    @property
+    def items_count(self) -> int:
+        if hasattr(self, '_items_count'):
+            return self._items_count
+        return self.items.count()
+
+    @items_count.setter
+    def items_count(self, value: int):
+        self._items_count = value
+
+    @property
+    def total_estimated_minutes(self) -> int:
+        if hasattr(self, '_total_estimated_minutes'):
+            return self._total_estimated_minutes
+        return sum(
+            item.book.estimated_read_time_minutes
+            for item in self.items.select_related('book')
+        )
+
+    @total_estimated_minutes.setter
+    def total_estimated_minutes(self, value: int):
+        self._total_estimated_minutes = value
+
+
+class UserReadingListItem(models.Model):
+    reading_list = models.ForeignKey(
+        UserReadingList,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name='in_reading_lists',
+    )
+    order = models.PositiveIntegerField(default=0)
+    note = models.CharField(max_length=255, blank=True, default='')
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'added_at']
+        unique_together = ('reading_list', 'book')
+
+    def __str__(self):
+        return f"{self.reading_list.title} - #{self.order}: {self.book.title}"
 
 

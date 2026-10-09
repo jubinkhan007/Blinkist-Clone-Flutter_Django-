@@ -13,8 +13,11 @@ import '../../reader/domain/highlight_models.dart';
 import '../../reader/data/audio_bookmark_repository.dart';
 import '../../reader/domain/audio_bookmark_models.dart';
 import '../../reader/presentation/quote_card_dialog.dart';
+import 'package:flutter/services.dart';
 import '../data/library_repository.dart';
 import '../data/offline_downloads_service.dart';
+import '../data/reading_list_repository.dart';
+import '../domain/reading_list_models.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   final String? initialTab;
@@ -24,12 +27,15 @@ class DownloadsScreen extends ConsumerWidget {
   int _resolveTabIndex(String? tab) {
     if (tab == null) return 0;
     switch (tab.toLowerCase()) {
-      case 'downloads':
+      case 'spaces':
+      case 'shelves':
         return 1;
+      case 'downloads':
+        return 2;
       case 'notebook':
       case 'notes':
       case 'bookmarks':
-        return 2;
+        return 3;
       case 'books':
       default:
         return 0;
@@ -44,13 +50,16 @@ class DownloadsScreen extends ConsumerWidget {
     return DefaultTabController(
       key: ValueKey(initialTab),
       initialIndex: _resolveTabIndex(initialTab),
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My Library'),
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'My Books'),
+              Tab(text: 'Spaces'),
               Tab(text: 'Downloads'),
               Tab(text: 'Notebook'),
             ],
@@ -64,6 +73,7 @@ class DownloadsScreen extends ConsumerWidget {
               error: (error, _) =>
                   Center(child: Text('Failed to load: $error')),
             ),
+            const _SpacesTab(),
             _DownloadsTab(downloads: downloads),
             const _NotebookTab(),
           ],
@@ -1448,6 +1458,589 @@ class _NotebookTabState extends ConsumerState<_NotebookTab> {
             }),
         ],
       ),
+    );
+  }
+}
+
+class _SpacesTab extends ConsumerStatefulWidget {
+  const _SpacesTab();
+
+  @override
+  ConsumerState<_SpacesTab> createState() => _SpacesTabState();
+}
+
+class _SpacesTabState extends ConsumerState<_SpacesTab> {
+  Color _hexToColor(String hex) {
+    final clean = hex.replaceAll('#', '');
+    if (clean.length == 6) {
+      return Color(int.parse('FF$clean', radix: 16));
+    }
+    return const Color(0xFF3B82F6);
+  }
+
+  Future<void> _showCreateSpaceSheet() async {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String currentEmoji = '📚';
+    String currentColor = '#3B82F6';
+    bool currentPublic = false;
+    bool isSaving = false;
+
+    const emojis = ['📚', '💡', '🚀', '🧠', '🎯', '🌿', '🔥', '💎', '⚡', '📖', '💼', '🧘'];
+    const colors = [
+      '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#64748B'
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final theme = Theme.of(ctx);
+          final colorScheme = theme.colorScheme;
+          final keyboardInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 200),
+            padding: EdgeInsets.only(bottom: keyboardInset),
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+              ),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Create Reading Space',
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.of(ctx).pop(),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Text('Space Name', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: titleCtrl,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Morning Mindset, Tech & AI',
+                          filled: true,
+                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text('Description (Optional)', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: descCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'What is this shelf about?',
+                          filled: true,
+                          fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Icon Emoji', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 44,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: emojis.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (ctx, index) {
+                            final e = emojis[index];
+                            final sel = e == currentEmoji;
+                            return InkWell(
+                              onTap: () => setSheetState(() => currentEmoji = e),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: sel ? colorScheme.primary.withValues(alpha: 0.15) : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: sel ? colorScheme.primary : Colors.transparent, width: 2),
+                                ),
+                                child: Center(child: Text(e, style: const TextStyle(fontSize: 20))),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Theme Accent', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 38,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: colors.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (ctx, index) {
+                            final hex = colors[index];
+                            final sel = hex == currentColor;
+                            final col = _hexToColor(hex);
+                            return InkWell(
+                              onTap: () => setSheetState(() => currentColor = hex),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: col,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: sel ? Colors.white : Colors.transparent, width: 2.5),
+                                ),
+                                child: sel ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SwitchListTile.adaptive(
+                        value: currentPublic,
+                        onChanged: (val) => setSheetState(() => currentPublic = val),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Make Public & Shareable'),
+                        subtitle: const Text('Anyone with your space link will be able to view and clone it.'),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  final name = titleCtrl.text.trim();
+                                  if (name.isEmpty) return;
+
+                                  setSheetState(() => isSaving = true);
+                                  try {
+                                    final repo = ref.read(readingListRepositoryProvider);
+                                    await repo.createReadingList(
+                                      title: name,
+                                      description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                                      emoji: currentEmoji,
+                                      colorHex: currentColor,
+                                      isPublic: currentPublic,
+                                    );
+                                    ref.invalidate(userReadingListsProvider);
+                                    if (ctx.mounted) Navigator.of(ctx).pop();
+                                  } catch (e) {
+                                    setSheetState(() => isSaving = false);
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        SnackBar(content: Text('Failed to create space: $e'), backgroundColor: Colors.redAccent),
+                                      );
+                                    }
+                                  }
+                                },
+                          child: isSaving
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
+                              : const Text('Create Space'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _shareSpace(UserReadingList space) {
+    final shareUrl = 'https://blinkist.com/spaces/share/${space.shareToken}';
+    Clipboard.setData(ClipboardData(text: shareUrl));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Share link copied to clipboard!\n$shareUrl'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _deleteSpace(UserReadingList space) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Space?'),
+        content: Text('Delete "${space.title}"? Your books will not be deleted from your general library.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final repo = ref.read(readingListRepositoryProvider);
+    try {
+      await repo.deleteReadingList(space.id);
+      ref.invalidate(userReadingListsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${space.title}"'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete space: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final spacesAsync = ref.watch(userReadingListsProvider);
+
+    return spacesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+      error: (err, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 40, color: colorScheme.error),
+              const SizedBox(height: 12),
+              Text('Failed to load reading spaces', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => ref.invalidate(userReadingListsProvider),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (spaces) {
+        if (spaces.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(child: Text('📚', style: TextStyle(fontSize: 36))),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Curate Your Library',
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create themed shelves like "Morning Mindset", "Leadership", or "Tech & AI". Add custom notes and share your spaces with teammates.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _showCreateSpaceSheet,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create Your First Space'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(userReadingListsProvider);
+            await ref.read(userReadingListsProvider.future);
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Header action row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${spaces.length} ${spaces.length == 1 ? 'Reading Space' : 'Reading Spaces'}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: _showCreateSpaceSheet,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('New Space'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Spaces list
+              ...spaces.map((space) {
+                final spaceColor = _hexToColor(space.colorHex);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Material(
+                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(18),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => context.push('/spaces/${space.id}'),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: spaceColor.withValues(alpha: 0.25),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Card banner
+                            Container(
+                              height: 60,
+                              decoration: BoxDecoration(
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    spaceColor.withValues(alpha: 0.8),
+                                    spaceColor.withValues(alpha: 0.3),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Center(
+                                      child: Text(space.emoji, style: const TextStyle(fontSize: 22)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      space.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert, color: Colors.white),
+                                    onSelected: (val) {
+                                      if (val == 'share') _shareSpace(space);
+                                      if (val == 'delete') _deleteSpace(space);
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      const PopupMenuItem(
+                                        value: 'share',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.link, size: 18),
+                                            SizedBox(width: 8),
+                                            Text('Share Link'),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                            SizedBox(width: 8),
+                                            Text('Delete Space', style: TextStyle(color: Colors.redAccent)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Body details
+                            Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (space.description.isNotEmpty) ...[
+                                    Text(
+                                      space.description,
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+
+                                  Row(
+                                    children: [
+                                      // Meta stats chip
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: spaceColor.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${space.itemsCount} ${space.itemsCount == 1 ? 'book' : 'books'} • ${space.totalEstimatedMinutes}m read',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: spaceColor,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          space.isPublic ? '🌐 Public' : '🔒 Private',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+
+                                      // Preview Covers Stack
+                                      if (space.previewCovers.isNotEmpty)
+                                        SizedBox(
+                                          height: 36,
+                                          width: 24.0 + (space.previewCovers.take(4).length - 1) * 16.0,
+                                          child: Stack(
+                                            children: space.previewCovers
+                                                .take(4)
+                                                .toList()
+                                                .asMap()
+                                                .entries
+                                                .map((entry) {
+                                              final idx = entry.key;
+                                              final coverUrl = resolveServerUrl(entry.value);
+                                              return Positioned(
+                                                left: idx * 16.0,
+                                                child: Container(
+                                                  width: 24,
+                                                  height: 36,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: Colors.white, width: 1),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: Colors.black.withValues(alpha: 0.15),
+                                                        blurRadius: 3,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(3),
+                                                    child: Image.network(
+                                                      coverUrl,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => Container(
+                                                        color: Colors.grey.shade400,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 }
