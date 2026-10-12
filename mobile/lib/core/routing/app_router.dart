@@ -18,6 +18,7 @@ import '../../src/features/catalog/presentation/collection_detail_screen.dart';
 import '../../src/features/progress/presentation/reading_stats_screen.dart';
 import '../../src/features/flashcards/presentation/flashcard_study_screen.dart';
 import '../../src/features/library/presentation/space_detail_screen.dart';
+import '../../src/features/media/presentation/daily_blink_screen.dart';
 import 'deep_link_service.dart';
 
 // Keys for nested navigation
@@ -121,6 +122,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           return const FlashcardStudyScreen(isDailyReview: true);
         },
+      ),
+      GoRoute(
+        path: '/daily-blink',
+        builder: (context, state) => const DailyBlinkScreen(),
+      ),
+      GoRoute(
+        path: '/daily-digest',
+        redirect: (context, state) => '/daily-blink',
       ),
       GoRoute(
         path: '/spaces/:id',

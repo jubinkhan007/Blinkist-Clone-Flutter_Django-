@@ -11,7 +11,7 @@ __pycache__/
 *.so
 
 # Uploaded Media
-media/
+/media/
 backend/media/
 
 # Environment secrets

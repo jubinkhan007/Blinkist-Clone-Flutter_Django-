@@ -30,4 +30,5 @@ urlpatterns = [
     path('api/v1/highlights/', include('apps.summaries.highlight_urls')),
     path('api/v1/audio-bookmarks/', include('apps.summaries.audio_bookmark_urls')),
     path('api/v1/notifications/', include('apps.notifications.urls')),
+    path('api/v1/media/', include('apps.media.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

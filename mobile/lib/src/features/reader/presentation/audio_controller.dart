@@ -8,6 +8,8 @@ import '../../../../core/networking/api_client.dart';
 import '../../../../main.dart';
 import '../../book/data/content_repository.dart';
 import '../../book/domain/book_models.dart';
+import '../../media/data/daily_digest_repository.dart';
+import '../../media/domain/daily_digest_models.dart';
 import '../../progress/data/progress_repository.dart';
 import '../data/audio_handler.dart';
 
@@ -75,6 +77,9 @@ class AudioState {
   final Set<int> completedSectionIds;
   final List<QueuedBook> queue;
   final bool autoPlayNext;
+  final bool isDailyDigestMode;
+  final int? activeDigestId;
+  final String? dailyDigestTheme;
 
   const AudioState({
     this.bookId,
@@ -96,6 +101,9 @@ class AudioState {
     this.completedSectionIds = const {},
     this.queue = const [],
     this.autoPlayNext = true,
+    this.isDailyDigestMode = false,
+    this.activeDigestId,
+    this.dailyDigestTheme,
   });
 
   AudioState copyWith({
@@ -118,6 +126,9 @@ class AudioState {
     Set<int>? completedSectionIds,
     List<QueuedBook>? queue,
     bool? autoPlayNext,
+    bool? isDailyDigestMode,
+    Object? activeDigestId = _unset,
+    Object? dailyDigestTheme = _unset,
   }) {
     return AudioState(
       bookId: bookId == _unset ? this.bookId : bookId as int?,
@@ -145,6 +156,13 @@ class AudioState {
       completedSectionIds: completedSectionIds ?? this.completedSectionIds,
       queue: queue ?? this.queue,
       autoPlayNext: autoPlayNext ?? this.autoPlayNext,
+      isDailyDigestMode: isDailyDigestMode ?? this.isDailyDigestMode,
+      activeDigestId: activeDigestId == _unset
+          ? this.activeDigestId
+          : activeDigestId as int?,
+      dailyDigestTheme: dailyDigestTheme == _unset
+          ? this.dailyDigestTheme
+          : dailyDigestTheme as String?,
     );
   }
 }
@@ -157,14 +175,16 @@ class AudioController extends StateNotifier<AudioState> {
   final AppAudioHandler _handler;
   final ProgressRepository _progressRepository;
   final ContentRepository _contentRepository;
+  final DailyDigestRepository? _dailyDigestRepository;
   List<SummarySection> _sections = [];
   Timer? _sleepTimer;
 
   AudioController(
     this._handler,
     this._progressRepository,
-    this._contentRepository,
-  ) : super(const AudioState()) {
+    this._contentRepository, [
+    this._dailyDigestRepository,
+  ]) : super(const AudioState()) {
     _init();
   }
 
@@ -188,17 +208,38 @@ class AudioController extends StateNotifier<AudioState> {
     // Listen to current media item changes
     _handler.mediaItem.listen((item) {
       if (item != null) {
-        final index = _sections.indexWhere((s) => s.id.toString() == item.id || s.title == item.title);
-        state = state.copyWith(
-          currentIndex: index >= 0 ? index : state.currentIndex,
-          currentSectionTitle: item.title,
-          duration: item.duration,
-          bookId: item.extras?['bookId'],
-          bookSlug: item.extras?['bookSlug'],
-          bookTitle: item.extras?['bookTitle'],
-          authorName: item.extras?['authorName'],
-          coverImageUrl: item.extras?['coverImageUrl'],
-        );
+        final isDigestItem = item.extras?['isDailyDigest'] == true;
+        if (isDigestItem) {
+          final order = item.extras?['order'] as int? ?? 1;
+          state = state.copyWith(
+            isDailyDigestMode: true,
+            activeDigestId: item.extras?['digestId'] as int?,
+            dailyDigestTheme: item.extras?['dailyDigestTheme'] as String? ?? item.album,
+            currentIndex: (order - 1).clamp(0, state.totalSections > 0 ? state.totalSections - 1 : 0),
+            currentSectionTitle: item.title,
+            duration: item.duration,
+            bookId: item.extras?['bookId'] as int?,
+            bookSlug: item.extras?['bookSlug'] as String?,
+            bookTitle: item.extras?['bookTitle'] as String?,
+            authorName: item.extras?['authorName'] as String?,
+            coverImageUrl: item.extras?['coverImageUrl'] as String?,
+          );
+        } else {
+          final index = _sections.indexWhere((s) => s.id.toString() == item.id || s.title == item.title);
+          state = state.copyWith(
+            isDailyDigestMode: false,
+            activeDigestId: null,
+            dailyDigestTheme: null,
+            currentIndex: index >= 0 ? index : state.currentIndex,
+            currentSectionTitle: item.title,
+            duration: item.duration,
+            bookId: item.extras?['bookId'],
+            bookSlug: item.extras?['bookSlug'],
+            bookTitle: item.extras?['bookTitle'],
+            authorName: item.extras?['authorName'],
+            coverImageUrl: item.extras?['coverImageUrl'],
+          );
+        }
       }
     });
 
@@ -371,6 +412,9 @@ class AudioController extends StateNotifier<AudioState> {
       completedSectionIds: initialCompleted,
       isLoading: true,
       errorMessage: null,
+      isDailyDigestMode: false,
+      activeDigestId: null,
+      dailyDigestTheme: null,
     );
 
     if (_sections.isEmpty) {
@@ -437,6 +481,122 @@ class AudioController extends StateNotifier<AudioState> {
     }
   }
 
+  Future<void> loadDailyDigest(
+    DailyAudioDigest digest, {
+    int startIndex = 0,
+    Duration startPosition = Duration.zero,
+    bool autoPlay = true,
+  }) async {
+    if (digest.items.isEmpty) {
+      state = state.copyWith(errorMessage: 'No items in daily audio digest.');
+      return;
+    }
+
+    _sections = digest.items.map<SummarySection>((item) {
+      return SummarySection(
+        id: item.sectionId,
+        slug: 'digest-${item.id}',
+        order: item.order,
+        title: item.insightPrompt.isNotEmpty ? item.insightPrompt : item.sectionTitle,
+        content: '',
+        audioUrl: item.audioUrl,
+        durationSeconds: item.durationSeconds,
+        estimatedReadMinutes: (item.durationSeconds / 60).ceil(),
+      );
+    }).toList();
+
+    final clampedIndex = startIndex.clamp(0, digest.items.length - 1);
+    final initialItem = digest.items[clampedIndex];
+
+    state = state.copyWith(
+      isDailyDigestMode: true,
+      activeDigestId: digest.id,
+      dailyDigestTheme: digest.theme,
+      bookId: initialItem.bookId,
+      bookSlug: initialItem.bookSlug,
+      bookTitle: initialItem.bookTitle,
+      authorName: initialItem.authorName,
+      coverImageUrl: initialItem.coverImageUrl,
+      totalSections: digest.items.length,
+      currentIndex: clampedIndex,
+      currentSectionTitle: initialItem.insightPrompt.isNotEmpty
+          ? initialItem.insightPrompt
+          : initialItem.sectionTitle,
+      isLoading: true,
+      errorMessage: null,
+      completedSectionIds: const {},
+    );
+
+    final mediaItems = digest.items.map((item) {
+      Uri? resolvedArtUri;
+      if (item.coverImageUrl != null && item.coverImageUrl!.isNotEmpty) {
+        resolvedArtUri = Uri.tryParse(resolveServerUrl(item.coverImageUrl!));
+      }
+
+      final streamUrl = item.audioUrl != null && item.audioUrl!.isNotEmpty
+          ? resolveServerUrl(item.audioUrl!)
+          : 'digest_audio_${item.id}';
+
+      return MediaItem(
+        id: streamUrl,
+        album: 'Daily Blink • ${digest.theme}',
+        title: item.insightPrompt.isNotEmpty ? item.insightPrompt : item.sectionTitle,
+        artist: '${item.bookTitle} • ${item.authorName}',
+        artUri: resolvedArtUri,
+        duration: item.durationSeconds > 0 ? Duration(seconds: item.durationSeconds) : null,
+        extras: {
+          'isDailyDigest': true,
+          'digestId': digest.id,
+          'dailyDigestTheme': digest.theme,
+          'digestItemId': item.id,
+          'order': item.order,
+          'insightPrompt': item.insightPrompt,
+          'bookId': item.bookId,
+          'bookSlug': item.bookSlug,
+          'bookTitle': item.bookTitle,
+          'authorName': item.authorName,
+          'coverImageUrl': item.coverImageUrl,
+          'sectionId': item.sectionId,
+          'sectionTitle': item.sectionTitle,
+        },
+      );
+    }).toList();
+
+    try {
+      await _handler.loadPlaylist(mediaItems, initialIndex: clampedIndex);
+
+      if (startPosition > Duration.zero) {
+        await _handler.seek(startPosition);
+      }
+
+      await _loadPreferredSpeed();
+
+      if (autoPlay) {
+        await _handler.play();
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to load Daily Audio Digest.',
+      );
+      debugPrint('AudioController Daily Digest error: $e');
+    }
+  }
+
+  Future<void> _saveDailyDigestProgress({bool isCompleted = false}) async {
+    if (state.activeDigestId == null || _dailyDigestRepository == null) return;
+    try {
+      await _dailyDigestRepository.updateProgress(
+        digestId: state.activeDigestId!,
+        currentItemIndex: state.currentIndex,
+        currentPositionSeconds: state.currentPosition.inSeconds,
+        isCompleted: isCompleted,
+      );
+    } catch (e) {
+      debugPrint('Failed to save daily digest progress: $e');
+    }
+  }
+
   Future<void> _loadPreferredSpeed() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -450,6 +610,32 @@ class AudioController extends StateNotifier<AudioState> {
   }
 
   void _onSectionComplete() {
+    if (state.isDailyDigestMode && state.activeDigestId != null) {
+      final isLastDigestItem = state.currentIndex >= state.totalSections - 1;
+      _saveDailyDigestProgress(isCompleted: isLastDigestItem);
+
+      if (state.sleepTimerMode == 'end_of_chapter') {
+        pause();
+        setSleepTimer('off');
+        return;
+      }
+
+      final isLastSection = state.currentIndex >= _sections.length - 1;
+      if (isLastSection) {
+        if (state.sleepTimerMode == 'end_of_summary') {
+          pause();
+          setSleepTimer('off');
+          return;
+        }
+
+        if (state.autoPlayNext && state.queue.isNotEmpty) {
+          _playNextInQueue();
+          return;
+        }
+      }
+      return;
+    }
+
     final curSection = currentSection;
     if (curSection != null) {
       final updatedCompleted = Set<int>.from(state.completedSectionIds)..add(curSection.id);
@@ -593,7 +779,11 @@ class AudioController extends StateNotifier<AudioState> {
   Future<void> play() => _handler.play();
   Future<void> pause() async {
     await _handler.pause();
-    await _saveProgress();
+    if (state.isDailyDigestMode && state.activeDigestId != null) {
+      await _saveDailyDigestProgress();
+    } else {
+      await _saveProgress();
+    }
   }
 
   void togglePlayPause() {
@@ -618,6 +808,17 @@ class AudioController extends StateNotifier<AudioState> {
   Future<void> skipPrevious() => _handler.skipToPrevious();
 
   Future<void> jumpToSection(int index) async {
+    if (index < 0 || index >= _sections.length) return;
+
+    if (state.isDailyDigestMode) {
+      final queue = _handler.queue.value;
+      if (index < queue.length) {
+        await _handler.skipToQueueItem(index);
+        await _handler.play();
+        return;
+      }
+    }
+
     final sectionId = _sections[index].id;
     final queue = _handler.queue.value;
     final queueIndex = queue.indexWhere((item) => item.extras?['sectionId'] == sectionId);
@@ -650,7 +851,11 @@ class AudioController extends StateNotifier<AudioState> {
   Future<void> stop({bool clearQueue = false}) async {
     _sleepTimer?.cancel();
     _sleepTimer = null;
-    await _saveProgress();
+    if (state.isDailyDigestMode && state.activeDigestId != null) {
+      await _saveDailyDigestProgress();
+    } else {
+      await _saveProgress();
+    }
     await _handler.stop();
     if (clearQueue) {
       _sections = [];
@@ -689,5 +894,6 @@ final audioControllerProvider =
       final repo = ref.watch(progressRepositoryProvider);
       final contentRepo = ref.watch(contentRepositoryProvider);
       final handler = ref.watch(audioHandlerProvider);
-      return AudioController(handler, repo, contentRepo);
+      final dailyDigestRepo = ref.watch(dailyDigestRepositoryProvider);
+      return AudioController(handler, repo, contentRepo, dailyDigestRepo);
     });
