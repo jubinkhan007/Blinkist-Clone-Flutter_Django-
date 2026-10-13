@@ -474,6 +474,34 @@ class BookAskAiApiTests(APITestCase):
         self.assertIn("1% improvements compound", result['answer'])
         self.assertEqual(len(result['suggested_followups']), 3)
         self.assertEqual(result['suggested_followups'][1], "What is the 2-minute rule?")
+        self.assertIn('citations', result)
+
+    def test_ask_ai_via_summaries_endpoint_and_citations(self):
+        url = reverse('summary_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'Give me an execution checklist',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('answer', response.data)
+        self.assertIn('citations', response.data)
+        self.assertGreaterEqual(len(response.data['citations']), 1)
+        first_citation = response.data['citations'][0]
+        self.assertIn('order', first_citation)
+        self.assertIn('title', first_citation)
+        self.assertIn('slug', first_citation)
+        self.assertIn('id', first_citation)
+
+    def test_ask_ai_eli5_quick_prompt(self):
+        url = reverse('summary_ask_ai', kwargs={'slug': self.book.slug})
+        payload = {
+            'question': 'Explain like I\'m 5',
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('LEGO', response.data['answer'])
+        self.assertIn('citations', response.data)
+        self.assertGreaterEqual(len(response.data['citations']), 1)
 
 
 class AudioQueueApiTests(APITestCase):

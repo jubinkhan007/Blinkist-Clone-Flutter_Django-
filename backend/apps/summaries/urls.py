@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import SummarySectionDetailView, SummarySectionListView
+from apps.catalog.views import BookAskAiView
 from .flashcard_views import (
     BookFlashcardListView,
     FlashcardReviewView,
@@ -8,6 +9,9 @@ from .flashcard_views import (
 )
 
 urlpatterns = [
+    # Book AI Q&A Endpoint
+    path('<slug:slug>/ask/', BookAskAiView.as_view(), name='summary_ask_ai'),
+
     # Flashcard & Active Recall Endpoints
     path('flashcards/daily-review/', DailyReviewDeckView.as_view(), name='daily_review_deck'),
     path('flashcards/<int:pk>/review/', FlashcardReviewView.as_view(), name='flashcard_review'),

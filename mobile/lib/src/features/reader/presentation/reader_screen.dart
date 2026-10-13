@@ -1028,6 +1028,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     authorName: book.author.name,
                     currentSectionSlug: currentSection?.slug,
                     currentSectionTitle: currentSection?.title,
+                    onCitationTap: (sectionSlug, sectionOrder) {
+                      final targetIndex = sectionOrder - 1;
+                      if (targetIndex >= 0 && targetIndex < sections.length) {
+                        _pageController.animateToPage(
+                          targetIndex,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      }
+                    },
                   ),
                 );
               },
@@ -1586,6 +1596,40 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               );
             },
           ),
+          orElse: () => null,
+        ),
+        floatingActionButton: bookAsync.maybeWhen(
+          data: (book) {
+            final currentSection = (_currentIndex < sections.length)
+                ? sections[_currentIndex]
+                : null;
+            return FloatingActionButton.extended(
+              heroTag: 'reader_ask_ai_fab',
+              onPressed: () => AskBookAiSheet.show(
+                context,
+                bookSlug: book.slug,
+                bookTitle: book.title,
+                authorName: book.author.name,
+                currentSectionSlug: currentSection?.slug,
+                currentSectionTitle: currentSection?.title,
+                onCitationTap: (sectionSlug, sectionOrder) {
+                  final targetIndex = sectionOrder - 1;
+                  if (targetIndex >= 0 && targetIndex < sections.length) {
+                    _pageController.animateToPage(
+                      targetIndex,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                },
+              ),
+              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+              label: const Text(
+                'Ask AI',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            );
+          },
           orElse: () => null,
         ),
       ),

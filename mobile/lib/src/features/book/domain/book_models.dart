@@ -185,20 +185,60 @@ class BookDetail extends Book {
   }
 }
 
+class SectionCitation {
+  final int order;
+  final String title;
+  final String slug;
+  final int? id;
+
+  const SectionCitation({
+    required this.order,
+    required this.title,
+    required this.slug,
+    this.id,
+  });
+
+  factory SectionCitation.fromJson(Map<String, dynamic> json) {
+    return SectionCitation(
+      order: json['order'] as int? ?? 1,
+      title: json['title'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      id: json['id'] as int?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'order': order,
+      'title': title,
+      'slug': slug,
+      'id': id,
+    };
+  }
+}
+
 class AskAiResponse {
   final String answer;
   final String bookTitle;
   final String? sectionTitle;
   final List<String> suggestedFollowups;
+  final List<SectionCitation> citations;
 
   AskAiResponse({
     required this.answer,
     required this.bookTitle,
     this.sectionTitle,
     this.suggestedFollowups = const [],
+    this.citations = const [],
   });
 
   factory AskAiResponse.fromJson(Map<String, dynamic> json) {
+    final rawCitations = json['citations'] as List<dynamic>? ?? [];
+    final citationsList = rawCitations
+        .whereType<Map<String, dynamic>>()
+        .map((e) => SectionCitation.fromJson(e))
+        .toList();
+
     return AskAiResponse(
       answer: json['answer'] as String? ?? '',
       bookTitle: json['book_title'] as String? ?? '',
@@ -207,6 +247,7 @@ class AskAiResponse {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      citations: citationsList,
     );
   }
 
@@ -216,6 +257,7 @@ class AskAiResponse {
       'book_title': bookTitle,
       'section_title': sectionTitle,
       'suggested_followups': suggestedFollowups,
+      'citations': citations.map((e) => e.toJson()).toList(),
     };
   }
 }
@@ -227,6 +269,7 @@ class AskAiMessage {
   final DateTime timestamp;
   final List<String> suggestedFollowups;
   final String? referencedSection;
+  final List<SectionCitation> citations;
 
   AskAiMessage({
     required this.id,
@@ -235,6 +278,7 @@ class AskAiMessage {
     required this.timestamp,
     this.suggestedFollowups = const [],
     this.referencedSection,
+    this.citations = const [],
   });
 }
 

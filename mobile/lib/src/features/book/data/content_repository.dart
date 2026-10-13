@@ -105,16 +105,28 @@ class ContentRepository {
     String? sectionSlug,
     List<Map<String, String>>? history,
   }) async {
-    final response = await _dio.post(
-      '/catalog/books/$slug/ask/',
-      data: {
-        'question': question,
-        if (sectionSlug != null && sectionSlug.isNotEmpty)
-          'section_slug': sectionSlug,
-        if (history != null && history.isNotEmpty) 'history': history,
-      },
-    );
-    return AskAiResponse.fromJson(response.data as Map<String, dynamic>);
+    final payload = {
+      'question': question,
+      if (sectionSlug != null && sectionSlug.isNotEmpty)
+        'section_slug': sectionSlug,
+      if (history != null && history.isNotEmpty) 'history': history,
+    };
+    try {
+      final response = await _dio.post(
+        '/summaries/$slug/ask/',
+        data: payload,
+      );
+      return AskAiResponse.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        final response = await _dio.post(
+          '/catalog/books/$slug/ask/',
+          data: payload,
+        );
+        return AskAiResponse.fromJson(response.data as Map<String, dynamic>);
+      }
+      rethrow;
+    }
   }
 }
 

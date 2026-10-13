@@ -5,6 +5,7 @@ import '../../../../core/networking/api_client.dart';
 import '../../book/data/content_repository.dart';
 import '../../book/domain/book_models.dart';
 import '../data/audio_bookmark_repository.dart';
+import 'ask_book_ai_sheet.dart';
 import 'audio_controller.dart';
 
 class AudioPlayerScreen extends ConsumerStatefulWidget {
@@ -1394,6 +1395,24 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: 'Ask AI about this book',
+            onPressed: () => AskBookAiSheet.show(
+              context,
+              bookSlug: book.slug,
+              bookTitle: book.title,
+              authorName: book.author.name,
+              currentSectionSlug: currentSection?.slug,
+              currentSectionTitle: currentSection?.title,
+              onCitationTap: (sectionSlug, sectionOrder) {
+                final targetIndex = sectionOrder - 1;
+                if (targetIndex >= 0 && targetIndex < sections.length) {
+                  controller.jumpToSection(targetIndex);
+                }
+              },
+            ),
+          ),
           _buildSleepTimerButton(context, audioState),
           IconButton(
             icon: const Icon(Icons.bookmark_add_outlined),
@@ -1537,11 +1556,66 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                     ],
                   ),
                 ),
-                // Quick Bookmark bar
+                // Quick Actions bar: Ask AI + Bookmark
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
+                      InkWell(
+                        onTap: () => AskBookAiSheet.show(
+                          context,
+                          bookSlug: book.slug,
+                          bookTitle: book.title,
+                          authorName: book.author.name,
+                          currentSectionSlug: currentSection?.slug,
+                          currentSectionTitle: currentSection?.title,
+                          onCitationTap: (sectionSlug, sectionOrder) {
+                            final targetIndex = sectionOrder - 1;
+                            if (targetIndex >= 0 && targetIndex < sections.length) {
+                              controller.jumpToSection(targetIndex);
+                            }
+                          },
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primaryContainer
+                                .withOpacity(0.35),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.25),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Ask AI 🤖💬',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       const Spacer(),
                       InkWell(
                         onTap: () => _showBookmarkSheet(context),

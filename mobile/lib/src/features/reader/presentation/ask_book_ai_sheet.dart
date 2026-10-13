@@ -11,6 +11,7 @@ class AskBookAiSheet extends ConsumerStatefulWidget {
   final String authorName;
   final String? currentSectionSlug;
   final String? currentSectionTitle;
+  final void Function(String sectionSlug, int sectionOrder)? onCitationTap;
 
   const AskBookAiSheet({
     super.key,
@@ -19,6 +20,7 @@ class AskBookAiSheet extends ConsumerStatefulWidget {
     required this.authorName,
     this.currentSectionSlug,
     this.currentSectionTitle,
+    this.onCitationTap,
   });
 
   static Future<void> show(
@@ -28,6 +30,7 @@ class AskBookAiSheet extends ConsumerStatefulWidget {
     required String authorName,
     String? currentSectionSlug,
     String? currentSectionTitle,
+    void Function(String sectionSlug, int sectionOrder)? onCitationTap,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -39,6 +42,7 @@ class AskBookAiSheet extends ConsumerStatefulWidget {
         authorName: authorName,
         currentSectionSlug: currentSectionSlug,
         currentSectionTitle: currentSectionTitle,
+        onCitationTap: onCitationTap,
       ),
     );
   }
@@ -55,12 +59,12 @@ class _AskBookAiSheetState extends ConsumerState<AskBookAiSheet> {
   String? _errorMessage;
 
   final List<String> _suggestedPrompts = [
-    "💡 Real-world example",
-    "⚡ Actionable steps for tomorrow",
-    "🎯 Synthesize key takeaways",
+    "⚡ 3 Practical action steps",
+    "👶 Explain like I'm 5",
+    "📋 Execution checklist",
+    "💡 Real-world case study",
     "🤔 Criticisms & counterarguments",
     "🧠 Core mental models",
-    "❓ Common beginner pitfalls",
   ];
 
   @override
@@ -127,6 +131,7 @@ class _AskBookAiSheetState extends ConsumerState<AskBookAiSheet> {
         timestamp: DateTime.now(),
         suggestedFollowups: response.suggestedFollowups,
         referencedSection: response.sectionTitle ?? widget.currentSectionTitle,
+        citations: response.citations,
       );
 
       if (mounted) {
@@ -592,8 +597,66 @@ class _AskBookAiSheetState extends ConsumerState<AskBookAiSheet> {
                     ),
                   ),
 
-                  // Reference pill if section available
-                  if (message.referencedSection != null) ...[
+                  // Structured Section Citations (Clickable jump pills)
+                  if (message.citations.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: message.citations.map((c) {
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              widget.onCitationTap?.call(c.slug, c.order);
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: colorScheme.primary.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.menu_book_rounded,
+                                    size: 13,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      "Section ${c.order}: ${c.title}",
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: colorScheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 10,
+                                    color: colorScheme.primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ] else if (message.referencedSection != null) ...[
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
