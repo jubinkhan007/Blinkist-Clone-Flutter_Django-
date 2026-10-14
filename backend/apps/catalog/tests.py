@@ -657,5 +657,82 @@ class SearchApiTests(APITestCase):
         self.assertTrue(SearchQueryLog.objects.filter(query__iexact='deep work').exists())
 
 
+class BookAdminActionTests(APITestCase):
+    def setUp(self):
+        self.author = Author.objects.create(name='James Clear')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            slug='atomic-habits-admin-test',
+            author=self.author,
+            description='An easy and proven way to build good habits.',
+            what_you_will_learn='Tiny changes lead to remarkable results.',
+        )
+        self.section = SummarySection.objects.create(
+            book=self.book,
+            order=1,
+            title='The Surprising Power of Atomic Habits',
+            slug='surprising-power',
+            content='Habits are the compound interest of self-improvement.',
+            plain_text='Habits are the compound interest of self-improvement.',
+            duration_seconds=300,
+            estimated_read_minutes=3,
+        )
+
+    def test_book_admin_flashcards_count_display(self):
+        from django.contrib.admin.sites import AdminSite
+        from apps.catalog.admin import BookAdmin
+        admin_instance = BookAdmin(Book, AdminSite())
+
+        # Initially 0 cards
+        display_str = admin_instance.flashcards_count(self.book)
+        self.assertIn('0 cards', display_str)
+
+        # After creating a flashcard
+        from apps.summaries.models import BookFlashcard
+        BookFlashcard.objects.create(
+            book=self.book,
+            section=self.section,
+            order=1,
+            front_prompt='What are habits?',
+            back_answer='Compound interest of self-improvement.',
+            quiz_options=[],
+        )
+        display_str = admin_instance.flashcards_count(self.book)
+        self.assertIn('1 cards', display_str)
+
+    def test_book_admin_set_today_daily_pick_action(self):
+        from django.contrib.admin.sites import AdminSite
+        from apps.catalog.admin import BookAdmin
+        from apps.catalog.models import DailyPick
+        from django.utils import timezone
+        from unittest.mock import MagicMock
+
+        admin_instance = BookAdmin(Book, AdminSite())
+        mock_request = MagicMock()
+        qs = Book.objects.filter(id=self.book.id)
+
+        admin_instance.set_today_daily_pick_action(mock_request, qs)
+
+        today = timezone.localdate()
+        pick = DailyPick.objects.filter(date=today).first()
+        self.assertIsNotNone(pick)
+        self.assertEqual(pick.book, self.book)
+
+    @patch('apps.summaries.flashcard_service.generate_or_get_flashcards')
+    def test_book_admin_generate_flashcards_action(self, mock_generate):
+        mock_generate.return_value = ['card1', 'card2', 'card3']
+        from django.contrib.admin.sites import AdminSite
+        from apps.catalog.admin import BookAdmin
+        from unittest.mock import MagicMock
+
+        admin_instance = BookAdmin(Book, AdminSite())
+        mock_request = MagicMock()
+        qs = Book.objects.filter(id=self.book.id)
+
+        admin_instance.generate_flashcards_action(mock_request, qs)
+        mock_generate.assert_called_once_with(self.book, force_regenerate=True)
+
+
+
 
 

@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 from unfold.decorators import display
@@ -151,6 +151,20 @@ class BookFlashcardAdmin(ModelAdmin):
     search_fields = ('book__title', 'front_prompt', 'back_answer', 'key_quote')
     raw_id_fields = ('book', 'section')
     ordering = ('book', 'order')
+    actions = ['regenerate_selected_flashcards']
+
+    def regenerate_selected_flashcards(self, request, queryset):
+        from .flashcard_service import generate_or_get_flashcards
+        books = set(queryset.values_list('book', flat=True))
+        from apps.catalog.models import Book
+        total = 0
+        for book_id in books:
+            book = Book.objects.filter(id=book_id).first()
+            if book:
+                cards = generate_or_get_flashcards(book, force_regenerate=True)
+                total += len(cards)
+        self.message_user(request, f'Regenerated {total} flashcards across {len(books)} book(s).', messages.SUCCESS)
+    regenerate_selected_flashcards.short_description = '🧠 Regenerate flashcards for these books'
 
     @display(description='Prompt')
     def prompt_preview(self, obj):

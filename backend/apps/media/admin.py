@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
@@ -39,6 +39,20 @@ class DailyAudioDigestAdmin(ModelAdmin):
     search_fields = ('title', 'subtitle', 'theme', 'user__email')
     inlines = [DailyAudioDigestItemInline]
     date_hierarchy = 'date'
+    actions = ['recompile_digest_action']
+
+    def recompile_digest_action(self, request, queryset):
+        from .services import get_or_create_daily_digest
+        count = 0
+        for digest in queryset:
+            target_date = digest.date
+            target_user = digest.user
+            digest.items.all().delete()
+            digest.delete()
+            get_or_create_daily_digest(user=target_user, target_date=target_date)
+            count += 1
+        self.message_user(request, f'Recompiled {count} Daily Audio Digest(s).', messages.SUCCESS)
+    recompile_digest_action.short_description = '🔄 Recompile Daily Audio Digest'
 
     @display(description='Audience')
     def target_audience(self, obj):

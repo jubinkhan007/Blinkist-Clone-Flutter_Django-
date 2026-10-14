@@ -9,27 +9,114 @@
 
 {% block content %}
 <div class="space-y-8">
-    <!-- Top KPI Metrics Grid -->
+    <!-- Header Command Bar -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-base-200 dark:border-base-800 pb-4">
+        <div>
+            <h1 class="text-xl font-bold text-base-900 dark:text-base-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary-600 dark:text-primary-400 text-2xl">dashboard_customize</span>
+                Blinkist Command Center
+            </h1>
+            <p class="text-xs text-base-500 dark:text-base-400 mt-0.5">
+                Microlearning catalog, audio narrations, user retention & revenue intelligence
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'admin:catalog_book_import_json' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-xs transition-colors">
+                <span class="material-symbols-outlined text-sm">upload_file</span>
+                Ingest Narration JSON
+            </a>
+            <a href="{% url 'admin:catalog_book_add' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-base-100 dark:bg-base-800 hover:bg-base-200 dark:hover:bg-base-700 text-base-800 dark:text-base-200 border border-base-200 dark:border-base-700 transition-colors">
+                <span class="material-symbols-outlined text-sm">add</span>
+                New Book
+            </a>
+            <a href="{% url 'admin:media_dailyaudiodigest_changelist' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-colors">
+                <span class="material-symbols-outlined text-sm">wb_sunny</span>
+                Morning Digests
+            </a>
+            <a href="{% url 'admin:summaries_bookflashcard_changelist' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 transition-colors">
+                <span class="material-symbols-outlined text-sm">quiz</span>
+                Flashcards
+            </a>
+        </div>
+    </div>
+
+    <!-- Top Executive KPI Grid -->
     <div>
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary-600 dark:text-primary-400">monitoring</span>
-                Platform Vital Metrics
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-base-500 dark:text-base-400 flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary-500 text-base">monitoring</span>
+                Executive Intelligence & Vital Metrics
             </h2>
-            <div class="flex items-center gap-2">
-                <a href="{% url 'admin:catalog_book_import_json' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-xs transition-colors">
-                    <span class="material-symbols-outlined text-sm">upload_file</span>
-                    Ingest JSON
-                </a>
-                <a href="{% url 'admin:catalog_book_add' %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-base-100 dark:bg-base-800 hover:bg-base-200 dark:hover:bg-base-700 text-base-800 dark:text-base-200 border border-base-200 dark:border-base-700 transition-colors">
-                    <span class="material-symbols-outlined text-sm">add</span>
-                    New Book
-                </a>
-            </div>
+            <span class="text-xs text-base-400">Live Real-Time Sync</span>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            <!-- Books KPI -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- 1. Revenue & Subscribers KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Est. MRR (BDT)</span>
+                    <span class="material-symbols-outlined text-emerald-500 text-xl">payments</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100 flex items-baseline gap-1">
+                    <span>৳{{ kpi.estimated_mrr_bdt }}</span>
+                    <span class="text-xs text-base-400 font-normal">/ month</span>
+                </div>
+                <div class="mt-2 text-xs text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>{{ kpi.active_subscribers }} Active · {{ kpi.trialing_subscribers }} Trialing</span>
+                </div>
+            </div>
+
+            <!-- 2. Morning Audio Digest KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Daily Blink Stream</span>
+                    <span class="material-symbols-outlined text-amber-500 text-xl">wb_sunny</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.digest_completions_today|default:"0" }}
+                    <span class="text-xs font-normal text-base-500">completions today</span>
+                </div>
+                <div class="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium truncate">
+                    {% if today_digest %}
+                        Theme: {{ today_digest.theme }}
+                    {% else %}
+                        No universal digest compiled yet
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 3. Knowledge Retention & Flashcards KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Active Recall & Mastery</span>
+                    <span class="material-symbols-outlined text-indigo-500 text-xl">psychology</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.mastery_rate|default:"0" }}%
+                    <span class="text-xs font-normal text-base-500">mastery</span>
+                </div>
+                <div class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                    {{ kpi.total_flashcards }} cards in deck · {{ kpi.total_reviews }} reviews logged
+                </div>
+            </div>
+
+            <!-- 4. Reading Spaces & Social KPI -->
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
+                    <span>Curated Spaces</span>
+                    <span class="material-symbols-outlined text-blue-500 text-xl">folder_special</span>
+                </div>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
+                    {{ kpi.total_reading_spaces|default:"0" }}
+                    <span class="text-xs font-normal text-base-500">lists created</span>
+                </div>
+                <div class="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
+                    {{ kpi.public_spaces }} shareable public links
+                </div>
+            </div>
+
+            <!-- 5. Books Catalog KPI -->
             <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
                 <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
                     <span>Total Library</span>
@@ -37,6 +124,7 @@
                 </div>
                 <div class="text-2xl font-bold text-base-900 dark:text-base-100">
                     {{ kpi.total_books|default:"0" }}
+                    <span class="text-xs font-normal text-base-500">titles</span>
                 </div>
                 <div class="mt-2 text-xs text-base-500 dark:text-base-400 flex items-center gap-1">
                     <span class="inline-block w-2 h-2 rounded-full bg-primary-500"></span>
@@ -44,7 +132,7 @@
                 </div>
             </div>
 
-            <!-- Audio Narrations KPI -->
+            <!-- 6. Audio Coverage KPI -->
             <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
                 <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
                     <span>Audio Narrations</span>
@@ -53,26 +141,12 @@
                 <div class="text-2xl font-bold text-base-900 dark:text-base-100">
                     {{ kpi.audio_sections|default:"0" }} <span class="text-xs font-normal text-base-500">/ {{ kpi.total_sections }}</span>
                 </div>
-                <div class="mt-2 text-xs text-purple-600 dark:purple-400 flex items-center gap-1">
+                <div class="mt-2 text-xs text-purple-600 dark:text-purple-400 font-medium">
                     <span class="font-semibold">{{ kpi.audio_coverage_pct }}%</span> audio ({{ kpi.total_audio_hours }}h total)
                 </div>
             </div>
 
-            <!-- Community & Readers KPI -->
-            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
-                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
-                    <span>Total Readers</span>
-                    <span class="material-symbols-outlined text-blue-500 text-xl">group</span>
-                </div>
-                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
-                    {{ kpi.total_users|default:"0" }}
-                </div>
-                <div class="mt-2 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                    <span class="font-semibold">{{ kpi.premium_users }}</span> Premium Members
-                </div>
-            </div>
-
-            <!-- Active Readers Today KPI -->
+            <!-- 7. Active Readers Today KPI -->
             <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
                 <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
                     <span>Active Today</span>
@@ -80,43 +154,30 @@
                 </div>
                 <div class="text-2xl font-bold text-base-900 dark:text-base-100">
                     {{ kpi.active_today_count|default:"0" }}
+                    <span class="text-xs font-normal text-base-500">readers</span>
                 </div>
-                <div class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                <div class="mt-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
                     {{ kpi.today_learning_mins|default:"0" }} mins read & listened
                 </div>
             </div>
 
-            <!-- Achievements Unlocked KPI -->
+            <!-- 8. Ingestion Pipeline KPI -->
             <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
                 <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
-                    <span>Badges Earned</span>
-                    <span class="material-symbols-outlined text-emerald-500 text-xl">military_tech</span>
-                </div>
-                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
-                    {{ kpi.total_badges_unlocked|default:"0" }}
-                </div>
-                <div class="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
-                    Milestones reached
-                </div>
-            </div>
-
-            <!-- Ingestion Pipeline KPI -->
-            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
-                <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
-                    <span>AI Ingestion</span>
-                    <span class="material-symbols-outlined text-indigo-500 text-xl">smart_toy</span>
+                    <span>AI Ingestion Queue</span>
+                    <span class="material-symbols-outlined text-rose-500 text-xl">smart_toy</span>
                 </div>
                 <div class="text-2xl font-bold text-base-900 dark:text-base-100">
                     {{ kpi.pending_jobs|default:"0" }} <span class="text-xs font-normal text-base-500">pending</span>
                 </div>
                 <div class="mt-2 text-xs {% if kpi.failed_jobs > 0 %}text-rose-600 dark:text-rose-400 font-semibold{% else %}text-base-500{% endif %}">
-                    {{ kpi.failed_jobs }} failed jobs
+                    {{ kpi.failed_jobs }} failed jobs · {{ kpi.total_badges_unlocked }} badges unlocked
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Live Feeds: Recent Activity & Highlights -->
+    <!-- Live Feeds: Recent Activity, Highlights & Spotlight -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Recent Reading & Audio Sessions -->
         <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-5 shadow-xs">
@@ -172,39 +233,57 @@
             </div>
         </div>
 
-        <!-- Trending Searches & Today's Pick -->
+        <!-- Spotlight: Morning Digest, Daily Pick & Search Trends -->
         <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-                <div class="flex items-center justify-between mb-3 border-b border-base-100 dark:border-base-800 pb-2">
-                    <h3 class="text-sm font-semibold text-base-900 dark:text-base-100 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-blue-500 text-base">search</span>
-                        Trending Search Queries
-                    </h3>
-                    <a href="{% url 'admin:catalog_searchquerylog_changelist' %}" class="text-xs text-primary-600 hover:text-primary-700">Trends</a>
+                <!-- Today's Morning Audio Digest -->
+                {% if today_digest %}
+                <div class="mb-4 p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/40">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">wb_sunny</span>
+                            Today's Daily Blink Digest
+                        </div>
+                        <span class="text-[11px] font-semibold text-amber-800 dark:text-amber-300">{{ today_digest.formatted_duration }}</span>
+                    </div>
+                    <div class="text-xs font-bold text-base-900 dark:text-base-100 truncate">{{ today_digest.title }}</div>
+                    <div class="text-[11px] text-base-500 truncate">{{ today_digest.theme }} · {{ today_digest.items.count }} Insights</div>
                 </div>
-                <div class="flex flex-wrap gap-1.5 mb-5">
-                    {% for term in trending_searches %}
-                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-base-100 dark:bg-base-800 text-base-700 dark:text-base-300 border border-base-200 dark:border-base-700 font-medium">
-                            {{ term.query }}
-                            <span class="text-[10px] text-base-400 bg-base-200 dark:bg-base-700 px-1 rounded-full">{{ term.count }}</span>
-                        </span>
-                    {% empty %}
-                        <p class="text-xs text-base-400 py-2">No queries logged yet.</p>
-                    {% endfor %}
-                </div>
-            </div>
+                {% endif %}
 
-            <!-- Today's Daily Pick Card -->
-            {% if today_pick %}
-            <div class="mt-2 pt-3 border-t border-base-100 dark:border-base-800 bg-base-50 dark:bg-base-800/40 p-3 rounded-lg flex items-center gap-3">
-                <span class="material-symbols-outlined text-amber-500 text-2xl">star</span>
-                <div class="overflow-hidden">
-                    <div class="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Today's Daily Blink</div>
-                    <div class="text-xs font-bold text-base-900 dark:text-base-100 truncate">{{ today_pick.book.title }}</div>
-                    <div class="text-[11px] text-base-500 truncate">{{ today_pick.book.author.name }}</div>
+                <!-- Today's Daily Pick Card -->
+                {% if today_pick %}
+                <div class="mb-4 p-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/40 flex items-center gap-3">
+                    <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-2xl">star</span>
+                    <div class="overflow-hidden">
+                        <div class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Featured Daily Pick</div>
+                        <div class="text-xs font-bold text-base-900 dark:text-base-100 truncate">{{ today_pick.book.title }}</div>
+                        <div class="text-[11px] text-base-500 truncate">{{ today_pick.book.author.name }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Trending Searches -->
+                <div class="border-t border-base-100 dark:border-base-800 pt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-semibold text-base-700 dark:text-base-300 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-blue-500 text-sm">trending_up</span>
+                            Trending Search Searches
+                        </h4>
+                        <a href="{% url 'admin:catalog_searchquerylog_changelist' %}" class="text-[11px] text-primary-600 hover:text-primary-700">Trends</a>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for term in trending_searches %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-base-100 dark:bg-base-800 text-base-700 dark:text-base-300 border border-base-200 dark:border-base-700 font-medium">
+                                {{ term.query }}
+                                <span class="text-[10px] text-base-400 bg-base-200 dark:bg-base-700 px-1 rounded-full">{{ term.count }}</span>
+                            </span>
+                        {% empty %}
+                            <p class="text-xs text-base-400 py-1">No queries logged yet.</p>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 

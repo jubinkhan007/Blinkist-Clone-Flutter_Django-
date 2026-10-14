@@ -215,3 +215,96 @@ class UserOnboardingTests(APITestCase):
         self.assertIn(self.book2, recommended_books)
 
 
+class AdminOverhaulTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='adminuser@example.com',
+            username='adminuser',
+            password='password123',
+            is_premium=True,
+            subscription_status=User.SubscriptionStatus.ACTIVE,
+            current_streak=7,
+            longest_streak=14,
+            has_completed_onboarding=True,
+            preferred_format='audio',
+        )
+
+    def test_custom_user_admin_badges(self):
+        from django.contrib.admin.sites import AdminSite
+        from apps.accounts.admin import CustomUserAdmin
+        admin_instance = CustomUserAdmin(User, AdminSite())
+
+        sub_badge = admin_instance.subscription_badge(self.user)
+        self.assertIn('Active Pro', sub_badge)
+
+        streak_badge = admin_instance.streak_badge(self.user)
+        self.assertIn('7', streak_badge)
+        self.assertIn('max 14', streak_badge)
+
+        self.assertTrue(admin_instance.onboarding_badge(self.user))
+
+        format_badge = admin_instance.format_badge(self.user)
+        self.assertIn('Audio', format_badge)
+
+    def test_custom_user_admin_actions(self):
+        from django.contrib.admin.sites import AdminSite
+        from apps.accounts.admin import CustomUserAdmin
+        from unittest.mock import MagicMock
+        admin_instance = CustomUserAdmin(User, AdminSite())
+        mock_request = MagicMock()
+
+        # Test grant 30-day subscription
+        qs = User.objects.filter(id=self.user.id)
+        admin_instance.grant_30_day_subscription(mock_request, qs)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_premium)
+        self.assertEqual(self.user.subscription_status, User.SubscriptionStatus.ACTIVE)
+        self.assertIsNotNone(self.user.subscription_end_date)
+
+        # Test cancel subscription
+        admin_instance.cancel_subscription_action(mock_request, qs)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_premium)
+        self.assertEqual(self.user.subscription_status, User.SubscriptionStatus.CANCELLED)
+
+        # Test reset streak
+        admin_instance.reset_streak_action(mock_request, qs)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.current_streak, 0)
+
+    def test_dashboard_callback_metrics(self):
+        from core.admin_dashboard import dashboard_callback
+        from unittest.mock import MagicMock
+        context = {}
+        result = dashboard_callback(MagicMock(), context)
+        self.assertIn('kpi', result)
+        kpi = result['kpi']
+        self.assertIn('estimated_mrr_bdt', kpi)
+        self.assertIn('active_subscribers', kpi)
+        self.assertIn('total_flashcards', kpi)
+        self.assertIn('mastery_rate', kpi)
+        self.assertIn('total_reading_spaces', kpi)
+        self.assertIn('digest_completions_today', kpi)
+
+    def test_log_entry_admin_action_badge(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
+        from django.contrib.contenttypes.models import ContentType
+        from core.admin_audit import LogEntryAdmin
+
+        ct = ContentType.objects.get_for_model(User)
+        entry = LogEntry(
+            user=self.user,
+            content_type=ct,
+            object_id=str(self.user.id),
+            object_repr='adminuser@example.com',
+            action_flag=ADDITION,
+            change_message='[{"added": {}}]',
+        )
+        admin_instance = LogEntryAdmin(LogEntry, AdminSite())
+        self.assertEqual(admin_instance.action_badge(entry), 'Added')
+        self.assertFalse(admin_instance.has_add_permission(None))
+        self.assertFalse(admin_instance.has_delete_permission(None))
+
+
+

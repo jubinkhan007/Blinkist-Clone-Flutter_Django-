@@ -156,6 +156,7 @@ class BookAdmin(ModelAdmin):
         'categories_list',
         'section_count',
         'audio_status',
+        'flashcards_count',
         'access_badge',
         'created_at',
     )
@@ -164,7 +165,12 @@ class BookAdmin(ModelAdmin):
     prepopulated_fields = {'slug': ('title',)}
     filter_horizontal = ('categories',)
     inlines = [SummarySectionInline]
-    actions = ['make_premium', 'make_free']
+    actions = [
+        'make_premium',
+        'make_free',
+        'generate_flashcards_action',
+        'set_today_daily_pick_action',
+    ]
     actions_list = ['import_json_action']
 
     fieldsets = (
@@ -246,6 +252,18 @@ class BookAdmin(ModelAdmin):
     def access_badge(self, obj):
         return 'PRO' if obj.is_premium else 'FREE'
 
+    @display(description='Flashcards')
+    def flashcards_count(self, obj):
+        count = obj.flashcards.count()
+        if count > 0:
+            url = reverse('admin:summaries_bookflashcard_changelist') + f'?book__id__exact={obj.id}'
+            return format_html(
+                '<a href="{}" style="font-weight: 600; color: #4f46e5;">🧠 {} cards</a>',
+                url,
+                count,
+            )
+        return format_html('<span style="color: #9ca3af; font-size: 11px;">0 cards</span>')
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @action(description='Import from JSON', url_path='import-json', icon='upload_file')
@@ -261,6 +279,45 @@ class BookAdmin(ModelAdmin):
         updated = queryset.update(is_premium=False)
         self.message_user(request, f'{updated} books marked as Free.', messages.SUCCESS)
     make_free.short_description = 'Mark selected books as Free'
+
+    def generate_flashcards_action(self, request, queryset):
+        from apps.summaries.flashcard_service import generate_or_get_flashcards
+        success_count = 0
+        total_cards = 0
+        for book in queryset:
+            try:
+                cards = generate_or_get_flashcards(book, force_regenerate=True)
+                total_cards += len(cards)
+                success_count += 1
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f'Could not generate flashcards for "{book.title}": {e}',
+                    messages.WARNING,
+                )
+        self.message_user(
+            request,
+            f'Generated {total_cards} retention flashcards across {success_count} book(s).',
+            messages.SUCCESS,
+        )
+    generate_flashcards_action.short_description = '🧠 Generate Flashcards with AI'
+
+    def set_today_daily_pick_action(self, request, queryset):
+        book = queryset.first()
+        if not book:
+            return
+        from django.utils import timezone
+        today = timezone.localdate()
+        pick, created = DailyPick.objects.update_or_create(
+            date=today,
+            defaults={'book': book},
+        )
+        self.message_user(
+            request,
+            f'"{book.title}" set as Featured Daily Pick for today ({today}).',
+            messages.SUCCESS,
+        )
+    set_today_daily_pick_action.short_description = '⭐ Set as Today\'s Featured Daily Pick'
 
     # ── Custom URLs ───────────────────────────────────────────────────────────
 

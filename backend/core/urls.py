@@ -19,6 +19,8 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+import core.admin_audit  # Register LogEntry in Unfold admin
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', include('apps.accounts.urls')),

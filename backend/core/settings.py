@@ -260,7 +260,7 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Audio & Summaries",
+                "title": "Audio & Narration",
                 "separator": True,
                 "collapsible": False,
                 "items": [
@@ -270,24 +270,56 @@ UNFOLD = {
                         "link": lambda request: reverse_lazy("admin:summaries_summarysection_changelist"),
                     },
                     {
-                        "title": "User Audio Bookmarks",
-                        "icon": "bookmark",
-                        "link": lambda request: reverse_lazy("admin:summaries_useraudiobookmark_changelist"),
+                        "title": "Daily Audio Digests",
+                        "icon": "wb_sunny",
+                        "link": lambda request: reverse_lazy("admin:media_dailyaudiodigest_changelist"),
                     },
                     {
-                        "title": "User Highlights & Notes",
-                        "icon": "highlight",
-                        "link": lambda request: reverse_lazy("admin:summaries_userhighlight_changelist"),
+                        "title": "Daily Digest Progress",
+                        "icon": "checklist_rtl",
+                        "link": lambda request: reverse_lazy("admin:media_userdailydigestprogress_changelist"),
                     },
                     {
                         "title": "User Audio Queues",
                         "icon": "queue_music",
                         "link": lambda request: reverse_lazy("admin:catalog_useraudioqueueitem_changelist"),
                     },
+                    {
+                        "title": "Audio Bookmarks",
+                        "icon": "bookmark",
+                        "link": lambda request: reverse_lazy("admin:summaries_useraudiobookmark_changelist"),
+                    },
                 ],
             },
             {
-                "title": "User Progress & Gamification",
+                "title": "Learning & Retention",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Retention Flashcards",
+                        "icon": "quiz",
+                        "link": lambda request: reverse_lazy("admin:summaries_bookflashcard_changelist"),
+                    },
+                    {
+                        "title": "Flashcard Reviews",
+                        "icon": "history_edu",
+                        "link": lambda request: reverse_lazy("admin:summaries_userflashcardreview_changelist"),
+                    },
+                    {
+                        "title": "Highlights & Notes",
+                        "icon": "highlight",
+                        "link": lambda request: reverse_lazy("admin:summaries_userhighlight_changelist"),
+                    },
+                    {
+                        "title": "Reading Lists & Spaces",
+                        "icon": "folder_special",
+                        "link": lambda request: reverse_lazy("admin:catalog_userreadinglist_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Gamification & Progress",
                 "separator": True,
                 "collapsible": False,
                 "items": [
@@ -307,6 +339,11 @@ UNFOLD = {
                         "link": lambda request: reverse_lazy("admin:progress_userbookprogress_changelist"),
                     },
                     {
+                        "title": "Section Progress",
+                        "icon": "check_circle",
+                        "link": lambda request: reverse_lazy("admin:progress_usersectionprogress_changelist"),
+                    },
+                    {
                         "title": "Audio Listening Progress",
                         "icon": "graphic_eq",
                         "link": lambda request: reverse_lazy("admin:progress_useraudioprogress_changelist"),
@@ -319,14 +356,24 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Users & Access",
+                "title": "Users, Access & Audit",
                 "separator": True,
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "User Accounts",
+                        "title": "Customer Accounts",
                         "icon": "group",
                         "link": lambda request: reverse_lazy("admin:accounts_user_changelist"),
+                    },
+                    {
+                        "title": "Permission Groups",
+                        "icon": "admin_panel_settings",
+                        "link": lambda request: reverse_lazy("admin:auth_group_changelist"),
+                    },
+                    {
+                        "title": "Admin Audit Log",
+                        "icon": "receipt_long",
+                        "link": lambda request: reverse_lazy("admin:admin_logentry_changelist"),
                     },
                 ],
             },
