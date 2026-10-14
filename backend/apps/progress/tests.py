@@ -151,8 +151,8 @@ class UserReadingStatsTests(APITestCase):
         )
 
         response = self.client.get(reverse('user_badges'))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['total_badges'], 17)
+        from apps.progress.badges import BADGES
+        self.assertEqual(response.data['total_badges'], len(BADGES))
         self.assertGreaterEqual(response.data['unlocked_count'], 2)
 
         badges_dict = {b['key']: b for b in response.data['badges']}
@@ -175,5 +175,141 @@ class UserReadingStatsTests(APITestCase):
         badges_dict = {b['key']: b for b in response.data['badges']}
         self.assertTrue(badges_dict['first_blink']['is_unlocked'])
         self.assertEqual(badges_dict['first_blink']['current_progress'], 1)
+
+
+class ActionPlanApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='habits@example.com',
+            username='habituser',
+            password='secret123',
+        )
+        self.client.force_authenticate(self.user)
+        author = Author.objects.create(name='James Clear')
+        category = Category.objects.create(name='Productivity', slug='productivity')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            subtitle='An Easy & Proven Way to Build Good Habits & Break Bad Ones',
+            slug='atomic-habits',
+            author=author,
+            description='A practical guide on how to form good habits and break bad ones.',
+            what_you_will_learn='How small changes can lead to remarkable results.',
+        )
+        self.book.categories.add(category)
+        from apps.summaries.models import SummarySection, UserHighlight
+        self.section1 = SummarySection.objects.create(
+            book=self.book,
+            title='The Surprising Power of Atomic Habits',
+            slug='the-surprising-power',
+            content='1% better every day adds up to 37x improvement in a single year.',
+            plain_text='1% better every day adds up to 37x improvement in a single year.',
+            order=1,
+        )
+        self.section2 = SummarySection.objects.create(
+            book=self.book,
+            title='How Your Habits Shape Your Identity',
+            slug='how-habits-shape-identity',
+            content='The ultimate form of intrinsic motivation is when a habit becomes part of your identity.',
+            plain_text='The ultimate form of intrinsic motivation is when a habit becomes part of your identity.',
+            order=2,
+        )
+
+    def test_generate_action_plan_7_days(self):
+        response = self.client.post(
+            reverse('action_plan_generate', kwargs={'book_identifier': self.book.slug}),
+            {'duration_days': 7},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['book_slug'], self.book.slug)
+        self.assertEqual(response.data['duration_days'], 7)
+        self.assertEqual(len(response.data['items']), 7)
+        self.assertEqual(response.data['progress_percent'], 0)
+        self.assertFalse(response.data['is_completed'])
+
+    def test_generate_action_plan_14_days(self):
+        response = self.client.post(
+            reverse('action_plan_generate', kwargs={'book_identifier': self.book.slug}),
+            {'duration_days': 14},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['duration_days'], 14)
+        self.assertEqual(len(response.data['items']), 14)
+
+    def test_action_plan_merges_user_highlights(self):
+        from apps.summaries.models import UserHighlight
+        UserHighlight.objects.create(
+            user=self.user,
+            book=self.book,
+            section=self.section1,
+            selected_text='1% better every day adds up',
+            note='Focus on micro improvements daily',
+        )
+
+        response = self.client.post(
+            reverse('action_plan_generate', kwargs={'book_identifier': self.book.slug}),
+            {'duration_days': 7, 'force_regenerate': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        # Check that highlight text or note is present in one of the item quotes
+        first_item = response.data['items'][0]
+        self.assertIn('1% better every day', first_item['associated_quote'])
+        self.assertIn('Focus on micro improvements daily', first_item['associated_quote'])
+
+    def test_toggle_item_completion_and_streak(self):
+        gen_res = self.client.post(
+            reverse('action_plan_generate', kwargs={'book_identifier': self.book.slug}),
+            {'duration_days': 7},
+            format='json',
+        )
+        plan_id = gen_res.data['id']
+        first_item_id = gen_res.data['items'][0]['id']
+
+        # Toggle item complete
+        toggle_res = self.client.patch(
+            reverse('action_plan_item_toggle', kwargs={'pk': plan_id, 'item_id': first_item_id}),
+            {'is_completed': True},
+            format='json',
+        )
+        self.assertEqual(toggle_res.status_code, 200)
+        self.assertEqual(toggle_res.data['completed_items_count'], 1)
+        self.assertEqual(toggle_res.data['progress_percent'], 14)  # 1/7 = ~14%
+        self.assertTrue(toggle_res.data['items'][0]['is_completed'])
+
+        # Verify daily activity / habit recorded
+        from apps.progress.models import UserDailyActivity
+        from django.utils import timezone
+        activity = UserDailyActivity.objects.filter(user=self.user, date=timezone.localdate()).first()
+        self.assertIsNotNone(activity)
+        self.assertGreater(activity.reading_minutes, 0)
+
+    def test_export_action_plan(self):
+        gen_res = self.client.post(
+            reverse('action_plan_generate', kwargs={'book_identifier': self.book.slug}),
+            {'duration_days': 7},
+            format='json',
+        )
+        plan_id = gen_res.data['id']
+
+        # Default JSON export
+        export_res = self.client.get(reverse('action_plan_export', kwargs={'pk': plan_id}))
+        self.assertEqual(export_res.status_code, 200)
+        self.assertIn('markdown', export_res.data)
+        self.assertIn('notion_text', export_res.data)
+        self.assertIn('ics_content', export_res.data)
+        self.assertIn('BEGIN:VCALENDAR', export_res.data['ics_content'])
+
+        # Markdown attachment export
+        md_res = self.client.get(reverse('action_plan_export', kwargs={'pk': plan_id}), {'export_format': 'md'})
+        self.assertEqual(md_res.status_code, 200)
+        self.assertEqual(md_res['Content-Type'], 'text/markdown; charset=utf-8')
+
+        # Calendar attachment export
+        ics_res = self.client.get(reverse('action_plan_export', kwargs={'pk': plan_id}), {'export_format': 'ics'})
+        self.assertEqual(ics_res.status_code, 200)
+        self.assertEqual(ics_res['Content-Type'], 'text/calendar; charset=utf-8')
+
 
 

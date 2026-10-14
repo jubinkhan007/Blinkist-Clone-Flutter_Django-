@@ -1,8 +1,11 @@
-from rest_framework import views, response, status, permissions
-from django.shortcuts import get_object_or_404
-from django.db import models
-from django.utils import timezone
+from __future__ import annotations
+
 from datetime import timedelta
+from django.db import models
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import permissions, response, status, views
 
 from apps.catalog.models import Book
 from apps.summaries.models import SummarySection
@@ -13,13 +16,18 @@ from .models import (
     UserSummaryProgress,
     UserFullBookProgress,
     UserDailyActivity,
+    ActionPlan,
+    ActionPlanItem,
 )
 from .serializers import (
     UserBookProgressSerializer,
     UserAudioProgressSerializer,
     UserSummaryProgressSerializer,
     UserFullBookProgressSerializer,
+    ActionPlanSerializer,
+    ActionPlanItemSerializer,
 )
+from .action_plan_service import ActionPlanService, ActionPlanExportService
 from .badges import evaluate_and_award_badges
 
 
@@ -345,4 +353,173 @@ class UserBadgesView(views.APIView):
             'unlocked_count': unlocked_count,
             'badges': badges,
         })
+
+
+class ActionPlanGenerateView(views.APIView):
+    """
+    POST /api/v1/progress/books/<book_identifier>/action-plan/generate/
+    Synthesizes a structured 7-day or 14-day micro-habit roadmap using Gemini & personal highlights.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, book_identifier):
+        if str(book_identifier).isdigit():
+            book = get_object_or_404(Book, id=int(book_identifier))
+        else:
+            book = get_object_or_404(Book, slug=book_identifier)
+
+        duration_days = int(request.data.get('duration_days', 7))
+        force_regenerate = bool(request.data.get('force_regenerate', False))
+
+        plan = ActionPlanService.generate_plan(
+            user=request.user,
+            book=book,
+            duration_days=duration_days,
+            force_regenerate=force_regenerate,
+        )
+
+        serializer = ActionPlanSerializer(plan, context={'request': request})
+        return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ActionPlanListView(views.APIView):
+    """
+    GET /api/v1/progress/action-plans/
+    Lists all action plans belonging to the authenticated user.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = ActionPlan.objects.filter(user=request.user).select_related('book', 'book__author').prefetch_related('items')
+
+        book_slug = request.query_params.get('book_slug')
+        if book_slug:
+            qs = qs.filter(book__slug=book_slug)
+
+        active_only = request.query_params.get('active')
+        if active_only is not None:
+            is_active = active_only.lower() in ('true', '1')
+            qs = qs.filter(is_active=is_active)
+
+        serializer = ActionPlanSerializer(qs, many=True, context={'request': request})
+        return response.Response(serializer.data)
+
+
+class ActionPlanDetailView(views.APIView):
+    """
+    GET /api/v1/progress/action-plans/<int:pk>/
+    DELETE /api/v1/progress/action-plans/<int:pk>/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        plan = get_object_or_404(
+            ActionPlan.objects.select_related('book', 'book__author').prefetch_related('items'),
+            id=pk,
+            user=request.user,
+        )
+        serializer = ActionPlanSerializer(plan, context={'request': request})
+        return response.Response(serializer.data)
+
+    def delete(self, request, pk):
+        plan = get_object_or_404(ActionPlan, id=pk, user=request.user)
+        plan.delete()
+        return response.Response({'detail': 'Action plan deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+
+class ActionPlanItemToggleView(views.APIView):
+    """
+    PATCH /api/v1/progress/action-plans/<int:pk>/items/<int:item_id>/toggle/
+    Toggles completion of a specific daily micro-habit.
+    Awards activity reading minutes for streak calculation.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, pk, item_id):
+        plan = get_object_or_404(ActionPlan, id=pk, user=request.user)
+        item = get_object_or_404(ActionPlanItem, id=item_id, plan=plan)
+
+        if 'is_completed' in request.data:
+            item.is_completed = bool(request.data.get('is_completed'))
+        else:
+            item.is_completed = not item.is_completed
+
+        if item.is_completed:
+            item.completed_at = timezone.now()
+            # Record activity for daily habit streak multiplier
+            record_activity(
+                request.user,
+                reading_minutes=3,
+                sections_read=0,
+                books_completed=0,
+            )
+        else:
+            item.completed_at = None
+
+        item.save(update_fields=['is_completed', 'completed_at'])
+
+        # Check if entire plan is completed
+        total = plan.items.count()
+        completed_count = plan.items.filter(is_completed=True).count()
+        if total > 0 and completed_count >= total:
+            if not plan.completed_at:
+                plan.completed_at = timezone.now()
+                plan.save(update_fields=['completed_at'])
+        else:
+            if plan.completed_at:
+                plan.completed_at = None
+                plan.save(update_fields=['completed_at'])
+
+        serializer = ActionPlanSerializer(plan, context={'request': request})
+        return response.Response(serializer.data)
+
+    def post(self, request, pk, item_id):
+        return self.patch(request, pk, item_id)
+
+
+class ActionPlanExportView(views.APIView):
+    """
+    GET /api/v1/progress/action-plans/<int:pk>/export/
+    Supports ?format=markdown | ics | notion | json
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        plan = get_object_or_404(
+            ActionPlan.objects.select_related('book', 'book__author').prefetch_related('items'),
+            id=pk,
+            user=request.user,
+        )
+
+        export_format = (
+            request.query_params.get('export_format')
+            or request.query_params.get('type')
+            or request.query_params.get('format')
+            or 'json'
+        ).lower()
+        md_text = ActionPlanExportService.to_markdown(plan)
+        notion_text = ActionPlanExportService.to_notion(plan)
+        ics_text = ActionPlanExportService.to_ics(plan)
+
+        if export_format in ('ics', 'calendar'):
+            resp = HttpResponse(ics_text, content_type='text/calendar; charset=utf-8')
+            resp['Content-Disposition'] = f'attachment; filename="{plan.book.slug}-habit-roadmap.ics"'
+            return resp
+
+        if export_format in ('md', 'markdown'):
+            resp = HttpResponse(md_text, content_type='text/markdown; charset=utf-8')
+            resp['Content-Disposition'] = f'attachment; filename="{plan.book.slug}-habit-roadmap.md"'
+            return resp
+
+        return response.Response({
+            'plan_id': plan.id,
+            'title': plan.title,
+            'book_title': plan.book.title,
+            'duration_days': plan.duration_days,
+            'progress_percent': plan.progress_percent,
+            'markdown': md_text,
+            'notion_text': notion_text,
+            'ics_content': ics_text,
+        })
+
 

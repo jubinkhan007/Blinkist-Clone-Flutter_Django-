@@ -177,6 +177,13 @@ class _CtaRow extends ConsumerWidget {
             label: const Text('Knowledge Check & Flashcards'),
             onPressed: () => context.push('/books/${book.slug}/flashcards'),
           ),
+          const SizedBox(height: 8),
+          // Action Plan & Habit Tracker
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.checklist_rtl_rounded, color: Color(0xFF00A86B)),
+            label: const Text('Action Plan & Habits ⚡'),
+            onPressed: () => context.push('/books/${book.slug}/action-plan'),
+          ),
         ],
         const SizedBox(height: 8),
         // Read Full Book (tertiary text link)

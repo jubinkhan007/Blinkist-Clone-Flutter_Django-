@@ -18,6 +18,8 @@ import '../data/library_repository.dart';
 import '../data/offline_downloads_service.dart';
 import '../data/reading_list_repository.dart';
 import '../domain/reading_list_models.dart';
+import '../../progress/data/action_plan_repository.dart';
+import '../../progress/domain/action_plan_models.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   final String? initialTab;
@@ -27,15 +29,20 @@ class DownloadsScreen extends ConsumerWidget {
   int _resolveTabIndex(String? tab) {
     if (tab == null) return 0;
     switch (tab.toLowerCase()) {
+      case 'action_plans':
+      case 'action-plans':
+      case 'habits':
+      case 'plans':
+        return 1;
       case 'spaces':
       case 'shelves':
-        return 1;
-      case 'downloads':
         return 2;
+      case 'downloads':
+        return 3;
       case 'notebook':
       case 'notes':
       case 'bookmarks':
-        return 3;
+        return 4;
       case 'books':
       default:
         return 0;
@@ -50,7 +57,7 @@ class DownloadsScreen extends ConsumerWidget {
     return DefaultTabController(
       key: ValueKey(initialTab),
       initialIndex: _resolveTabIndex(initialTab),
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My Library'),
@@ -59,6 +66,7 @@ class DownloadsScreen extends ConsumerWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'My Books'),
+              Tab(text: 'Action Plans'),
               Tab(text: 'Spaces'),
               Tab(text: 'Downloads'),
               Tab(text: 'Notebook'),
@@ -73,6 +81,7 @@ class DownloadsScreen extends ConsumerWidget {
               error: (error, _) =>
                   Center(child: Text('Failed to load: $error')),
             ),
+            const _ActionPlansTab(),
             const _SpacesTab(),
             _DownloadsTab(downloads: downloads),
             const _NotebookTab(),
@@ -2044,4 +2053,265 @@ class _SpacesTabState extends ConsumerState<_SpacesTab> {
     );
   }
 }
+
+class _ActionPlansTab extends ConsumerWidget {
+  const _ActionPlansTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plansAsync = ref.watch(actionPlansListProvider);
+
+    return plansAsync.when(
+      data: (plans) {
+        if (plans.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00A86B).withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.checklist_rtl_rounded,
+                      size: 48,
+                      color: Color(0xFF00A86B),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'No Habit Roadmaps Yet',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Turn any book into an actionable 7 or 14-day micro-habit roadmap with 1 tap.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.explore_outlined),
+                    label: const Text('Explore Books & Build Habits'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00A86B),
+                    ),
+                    onPressed: () => context.push('/explore'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => ref.refresh(actionPlansListProvider.future),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: plans.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final plan = plans[index];
+              return _ActionPlanLibraryCard(plan: plan);
+            },
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 40, color: Colors.red),
+            const SizedBox(height: 12),
+            Text('Failed to load action plans: $err'),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => ref.invalidate(actionPlansListProvider),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionPlanLibraryCard extends ConsumerWidget {
+  final ActionPlan plan;
+
+  const _ActionPlanLibraryCard({required this.plan});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final nextItem = plan.nextPendingItem;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.push('/action-plans/${plan.id}'),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00A86B).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${plan.durationDays}-Day Sprint',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF00A86B),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (plan.isCompleted)
+                                const Text(
+                                  'Completed 🎉',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF00A86B),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            plan.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'by ${plan.bookAuthor}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onPressed: () => context.push('/action-plans/${plan.id}'),
+                    ),
+                  ],
+                ),
+                if (nextItem != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('⚡ ', style: TextStyle(fontSize: 13)),
+                        Expanded(
+                          child: Text(
+                            'Next: Day ${nextItem.dayNumber} — ${nextItem.title}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: plan.totalItemsCount > 0
+                        ? plan.completedItemsCount / plan.totalItemsCount
+                        : 0.0,
+                    minHeight: 6,
+                    backgroundColor:
+                        isDark ? Colors.grey[800] : Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      plan.isCompleted
+                          ? const Color(0xFF00A86B)
+                          : const Color(0xFF3B82F6),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${plan.completedItemsCount}/${plan.totalItemsCount} Days Done',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      '${plan.progressPercent}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00A86B),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 

@@ -1043,6 +1043,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               },
               orElse: () => const SizedBox.shrink(),
             ),
+            bookAsync.maybeWhen(
+              data: (book) => IconButton(
+                tooltip: 'Action Plan & Habit Roadmap',
+                icon: const Icon(Icons.checklist_rtl_rounded),
+                onPressed: () => context.push('/books/${book.slug}/action-plan'),
+              ),
+              orElse: () => const SizedBox.shrink(),
+            ),
             IconButton(
               icon: const Icon(Icons.text_fields),
               onPressed: () => _showTypographyModal(context, ref),

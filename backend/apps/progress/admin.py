@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from unfold.admin import ModelAdmin
+from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 
 from apps.progress.badges import BADGES
@@ -12,6 +12,8 @@ from .models import (
     UserFullBookProgress,
     UserSectionProgress,
     UserSummaryProgress,
+    ActionPlan,
+    ActionPlanItem,
 )
 
 
@@ -163,3 +165,64 @@ class UserFullBookProgressAdmin(ModelAdmin):
     search_fields = ('user__email', 'book__title')
     raw_id_fields = ('user', 'book')
     ordering = ('-last_opened_at',)
+
+
+class ActionPlanItemInline(TabularInline):
+    model = ActionPlanItem
+    extra = 0
+    fields = ('day_number', 'title', 'suggested_habit', 'is_completed', 'completed_at')
+    readonly_fields = ('completed_at',)
+
+
+@admin.register(ActionPlan)
+class ActionPlanAdmin(ModelAdmin):
+    list_display = (
+        'title',
+        'user',
+        'book',
+        'duration_badge',
+        'progress_bar',
+        'completion_badge',
+        'created_at',
+    )
+    list_filter = ('duration_days', 'is_active', 'created_at')
+    search_fields = ('title', 'user__email', 'book__title')
+    raw_id_fields = ('user', 'book')
+    inlines = [ActionPlanItemInline]
+    ordering = ('-created_at',)
+
+    @display(description='Duration')
+    def duration_badge(self, obj):
+        return format_html(
+            '<span style="display: inline-block; padding: 2px 8px; border-radius: 12px; background: #e0e7ff; color: #3730a3; font-weight: 600; font-size: 11px;">⏱️ {} Days</span>',
+            obj.duration_days,
+        )
+
+    @display(description='Progress')
+    def progress_bar(self, obj):
+        pct = obj.progress_percent
+        color = '#00A86B' if obj.is_completed else '#3b82f6'
+        return format_html(
+            '<div style="display: flex; align-items: center; gap: 8px;">'
+            '<div style="width: 80px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">'
+            '<div style="width: {}%; height: 100%; background: {};"></div>'
+            '</div>'
+            '<span style="font-size: 11px; font-weight: 600; color: #4b5563;">{}/{} ({}%)</span>'
+            '</div>',
+            pct,
+            color,
+            obj.completed_items_count,
+            obj.total_items_count,
+            pct,
+        )
+
+    @display(
+        description='Status',
+        label={
+            'Finished': 'success',
+            'In Progress': 'info',
+        },
+    )
+    def completion_badge(self, obj):
+        return 'Finished' if obj.is_completed else 'In Progress'
+

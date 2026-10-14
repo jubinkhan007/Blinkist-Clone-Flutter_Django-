@@ -13,6 +13,7 @@ import '../../progress/domain/reading_stats_models.dart';
 import '../../onboarding/data/onboarding_repository.dart';
 import '../../flashcards/presentation/widgets/daily_recall_card.dart';
 import 'widgets/daily_audio_digest_hero.dart';
+import 'widgets/action_plan_card.dart';
 import '../domain/home_models.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -64,6 +65,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
               const DailyAudioDigestHero(),
+              const ActionPlanHomeWidget(),
               if (feed.dailyPick != null)
                 _DailyPickHero(book: feed.dailyPick!),
               const DailyRecallCard(),
