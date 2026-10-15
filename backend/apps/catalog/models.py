@@ -59,18 +59,81 @@ class ContentIngestionJob(models.Model):
         ('PENDING', 'Pending'),
         ('PROCESSING', 'Processing'),
         ('COMPLETED', 'Completed'),
-        ('FAILED', 'Failed')
+        ('FAILED', 'Failed'),
     ]
-    
-    file = models.FileField(upload_to='raw_books/')
+    SOURCE_TYPE_CHOICES = [
+        ('PDF', 'PDF Document'),
+        ('EPUB', 'EPUB E-Book'),
+        ('METADATA', 'Title / ISBN / Topic'),
+    ]
+
+    file = models.FileField(upload_to='raw_books/', null=True, blank=True)
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES, default='PDF')
+    input_query = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text="Book title, author, ISBN, or topic for metadata ingestion",
+    )
+    target_category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ingestion_jobs',
+    )
+    voice_name = models.CharField(
+        max_length=64,
+        default='en-US-ChristopherNeural',
+        help_text="Edge-TTS voice name for narration",
+    )
+    generate_audio = models.BooleanField(
+        default=True,
+        help_text="Synthesize voice narration for summary sections",
+    )
+    generate_flashcards = models.BooleanField(
+        default=True,
+        help_text="Generate active-recall flashcards deck",
+    )
+    generate_action_plan = models.BooleanField(
+        default=True,
+        help_text="Generate micro-habit action roadmap",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    book = models.OneToOneField(Book, on_delete=models.SET_NULL, null=True, blank=True)
+    progress_percent = models.PositiveIntegerField(
+        default=0,
+        help_text="Progress from 0 to 100%",
+    )
+    current_step = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        help_text="Human-readable description of current step",
+    )
+    book = models.OneToOneField(
+        Book,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ingestion_job',
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ingestion_jobs',
+    )
     logs = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-created_at']
+
     def __str__(self):
-        return f"Job {self.id} - {self.status}"
+        source_label = self.input_query or (self.file.name if self.file else f"Job {self.id}")
+        return f"[{self.source_type}] {source_label} ({self.status} {self.progress_percent}%)"
 
 
 class UserLibraryItem(models.Model):

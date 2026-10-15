@@ -733,6 +733,164 @@ class BookAdminActionTests(APITestCase):
         mock_generate.assert_called_once_with(self.book, force_regenerate=True)
 
 
+class ContentIngestionEngineTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            email='ingest_admin@example.com',
+            username='ingest_admin',
+            password='adminpassword',
+        )
+        self.category = Category.objects.create(name='Productivity & Focus', slug='productivity-focus')
+
+    def test_cover_generation_with_pil(self):
+        from apps.catalog.ingestion_service import generate_styled_book_cover
+        cover_bytes = generate_styled_book_cover(
+            title="Deep Work",
+            author="Cal Newport",
+            category_name="Productivity",
+        )
+        self.assertGreater(len(cover_bytes), 1000)
+        self.assertEqual(cover_bytes[:8], b'\x89PNG\r\n\x1a\n')
+
+    def test_run_ingestion_metadata_source(self):
+        from apps.catalog.ingestion_service import run_ingestion_job
+        from apps.catalog.models import ContentIngestionJob
+
+        job = ContentIngestionJob.objects.create(
+            source_type='METADATA',
+            input_query='Essentialism by Greg McKeown',
+            target_category=self.category,
+            created_by=self.user,
+            generate_audio=False,
+            generate_flashcards=True,
+            generate_action_plan=True,
+        )
+
+        book = run_ingestion_job(job.id)
+        job.refresh_from_db()
+
+        self.assertEqual(job.status, 'COMPLETED')
+        self.assertEqual(job.progress_percent, 100)
+        self.assertIsNotNone(job.book)
+        self.assertEqual(book.id, job.book.id)
+        self.assertIn('Essentialism', book.title)
+        self.assertGreaterEqual(book.sections.count(), 5)
+        self.assertTrue(bool(book.cover_image))
+
+    def test_ingestion_api_endpoints(self):
+        self.client.force_authenticate(self.user)
+
+        # 1. Post new ingestion job with run_synchronously=True
+        response = self.client.post(
+            reverse('ingest_list'),
+            {
+                'source_type': 'METADATA',
+                'input_query': 'Atomic Habits by James Clear',
+                'target_category_id': self.category.id,
+                'generate_audio': False,
+                'generate_flashcards': True,
+                'generate_action_plan': True,
+                'run_synchronously': True,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        job_id = response.data['id']
+        self.assertEqual(response.data['status'], 'COMPLETED')
+        self.assertEqual(response.data['progress_percent'], 100)
+        self.assertIsNotNone(response.data['book'])
+        self.assertIn('Atomic Habits', response.data['book']['title'])
+
+        # 2. Get status
+        status_res = self.client.get(reverse('ingest_detail', kwargs={'pk': job_id}))
+        self.assertEqual(status_res.status_code, 200)
+        self.assertEqual(status_res.data['status'], 'COMPLETED')
+
+        # 3. List jobs
+        list_res = self.client.get(reverse('ingest_list'))
+        self.assertEqual(list_res.status_code, 200)
+        self.assertGreaterEqual(len(list_res.data), 1)
+
+        # 4. Retry endpoint
+        retry_res = self.client.post(
+            reverse('ingest_retry', kwargs={'pk': job_id}),
+            {'run_synchronously': True},
+            format='json',
+        )
+        self.assertEqual(retry_res.status_code, 200)
+        self.assertEqual(retry_res.data['status'], 'COMPLETED')
+
+    def test_admin_ingestion_actions(self):
+        from django.contrib.admin.sites import AdminSite
+        from apps.catalog.admin import ContentIngestionJobAdmin
+        from apps.catalog.models import ContentIngestionJob
+        from unittest.mock import MagicMock
+
+        job = ContentIngestionJob.objects.create(
+            source_type='METADATA',
+            input_query='Mindset by Carol Dweck',
+            target_category=self.category,
+            generate_audio=False,
+            generate_flashcards=False,
+            generate_action_plan=False,
+        )
+
+        admin_instance = ContentIngestionJobAdmin(ContentIngestionJob, AdminSite())
+        mock_request = MagicMock()
+        mock_request.user = self.user
+
+        qs = ContentIngestionJob.objects.filter(id=job.id)
+        admin_instance.run_ingestion_now_action(mock_request, qs)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'COMPLETED')
+        self.assertEqual(job.progress_percent, 100)
+        self.assertIsNotNone(job.book)
+
+        # Test badge & progress bar methods
+        badge_html = admin_instance.status_badge(job)
+        self.assertEqual(badge_html, 'COMPLETED')
+        prog_html = admin_instance.progress_bar(job)
+        self.assertIn('100%', prog_html)
+
+    def test_run_ingestion_epub_source(self):
+        import io
+        import zipfile
+        from django.core.files.base import ContentFile
+        from apps.catalog.ingestion_service import run_ingestion_job
+        from apps.catalog.models import ContentIngestionJob
+
+        # Create a valid synthetic in-memory EPUB
+        epub_buf = io.BytesIO()
+        with zipfile.ZipFile(epub_buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.writestr('mimetype', 'application/epub+zip')
+            z.writestr(
+                'OEBPS/chapter1.xhtml',
+                '<html><body><h1>The Psychology of Money</h1><p>Morgan Housel</p><p>Doing well with money has a little to do with how smart you are and a lot to do with how you behave.</p></body></html>',
+            )
+
+        job = ContentIngestionJob.objects.create(
+            source_type='EPUB',
+            target_category=self.category,
+            created_by=self.user,
+            generate_audio=False,
+            generate_flashcards=True,
+            generate_action_plan=True,
+        )
+        job.file.save('psychology_of_money.epub', ContentFile(epub_buf.getvalue()), save=True)
+
+        book = run_ingestion_job(job.id)
+        job.refresh_from_db()
+
+        self.assertEqual(job.status, 'COMPLETED')
+        self.assertEqual(job.progress_percent, 100)
+        self.assertIsNotNone(job.book)
+        self.assertEqual(book.id, job.book.id)
+        self.assertGreaterEqual(book.sections.count(), 5)
+        self.assertTrue(bool(book.cover_image))
+
+
+
 
 
 

@@ -49,6 +49,7 @@ def dashboard_callback(request, context):
     # Ingestion pipeline health
     pending_jobs = ContentIngestionJob.objects.filter(status='PENDING').count()
     failed_jobs = ContentIngestionJob.objects.filter(status='FAILED').count()
+    completed_jobs = ContentIngestionJob.objects.filter(status='COMPLETED').count()
 
     # Spaced Repetition & Flashcards
     total_flashcards = BookFlashcard.objects.count()
@@ -94,6 +95,7 @@ def dashboard_callback(request, context):
             'total_badges_unlocked': total_badges_unlocked,
             'pending_jobs': pending_jobs,
             'failed_jobs': failed_jobs,
+            'completed_jobs': completed_jobs,
             # Subscriptions & Revenue
             'active_subscribers': active_subscribers,
             'trialing_subscribers': trialing_subscribers,

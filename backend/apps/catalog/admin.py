@@ -69,14 +69,107 @@ class JsonImportForm(forms.Form):
 
 @admin.register(ContentIngestionJob)
 class ContentIngestionJobAdmin(ModelAdmin):
-    list_display = ('id', 'book_title', 'status_badge', 'created_at')
-    list_filter = ('status', 'created_at')
-    search_fields = ('book__title',)
-    readonly_fields = ('status', 'book', 'logs', 'created_at', 'updated_at')
+    list_display = (
+        'id',
+        'source_type_badge',
+        'input_summary',
+        'progress_bar',
+        'status_badge',
+        'book_link',
+        'created_at',
+    )
+    list_filter = (
+        'status',
+        'source_type',
+        'generate_audio',
+        'generate_flashcards',
+        'generate_action_plan',
+        'created_at',
+    )
+    search_fields = ('input_query', 'book__title', 'book__author__name', 'logs')
+    readonly_fields = (
+        'status',
+        'progress_percent',
+        'current_step',
+        'book',
+        'created_by',
+        'logs_display',
+        'created_at',
+        'updated_at',
+    )
+    actions = ['run_ingestion_now_action', 'requeue_ingestion_action']
 
-    @display(description='Book')
-    def book_title(self, obj):
-        return obj.book.title if obj.book else '-'
+    fieldsets = (
+        (
+            'Source Input',
+            {
+                'fields': (
+                    'source_type',
+                    'file',
+                    'input_query',
+                    'target_category',
+                ),
+                'description': 'Upload a PDF/EPUB or provide a book title/ISBN/topic for AI metadata ingestion.',
+            },
+        ),
+        (
+            'Automation & AI Pipeline',
+            {
+                'fields': (
+                    'voice_name',
+                    'generate_audio',
+                    'generate_flashcards',
+                    'generate_action_plan',
+                ),
+                'description': 'Configure voice narration, active-recall deck synthesis, and habit roadmap.',
+            },
+        ),
+        (
+            'Job Status & Progress',
+            {
+                'fields': (
+                    'status',
+                    'progress_percent',
+                    'current_step',
+                    'book',
+                    'created_by',
+                ),
+            },
+        ),
+        (
+            'Pipeline Logs',
+            {
+                'classes': ('collapse',),
+                'fields': ('logs_display',),
+            },
+        ),
+        (
+            'Timestamps',
+            {
+                'classes': ('collapse',),
+                'fields': ('created_at', 'updated_at'),
+            },
+        ),
+    )
+
+    @display(
+        description='Source',
+        label={
+            'PDF': 'info',
+            'EPUB': 'warning',
+            'METADATA': 'success',
+        },
+    )
+    def source_type_badge(self, obj):
+        return obj.source_type
+
+    @display(description='Source Input')
+    def input_summary(self, obj):
+        if obj.input_query:
+            return obj.input_query
+        if obj.file:
+            return os.path.basename(obj.file.name)
+        return '-'
 
     @display(
         description='Status',
@@ -90,10 +183,91 @@ class ContentIngestionJobAdmin(ModelAdmin):
     def status_badge(self, obj):
         return obj.status
 
+    @display(description='Progress')
+    def progress_bar(self, obj):
+        pct = obj.progress_percent
+        color = '#10B981' if obj.status == 'COMPLETED' else ('#EF4444' if obj.status == 'FAILED' else '#3B82F6')
+        return format_html(
+            '<div style="min-width: 130px;">'
+            '<div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">'
+            '<span>{}</span><span>{}%</span>'
+            '</div>'
+            '<div style="background: rgba(148, 163, 184, 0.2); border-radius: 4px; height: 6px; overflow: hidden;">'
+            '<div style="background: {}; width: {}%; height: 100%; transition: width 0.3s;"></div>'
+            '</div>'
+            '</div>',
+            (obj.current_step[:25] + ('...' if len(obj.current_step) > 25 else '')) if obj.current_step else obj.status,
+            pct,
+            color,
+            pct,
+        )
+
+    @display(description='Book')
+    def book_link(self, obj):
+        if obj.book:
+            url = reverse('admin:catalog_book_change', args=[obj.book.id])
+            return format_html('<a href="{}" class="text-primary-600 font-medium">{}</a>', url, obj.book.title)
+        return '-'
+
+    @display(description='Execution Logs')
+    def logs_display(self, obj):
+        return format_html(
+            '<pre style="max-height: 350px; overflow-y: auto; background: #0f172a; color: #f8fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px;">{}</pre>',
+            obj.logs or 'No logs available.',
+        )
+
     def save_model(self, request, obj, form, change):
         if not change:
             obj.status = 'PENDING'
+            if not obj.created_by and request.user.is_authenticated:
+                obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+    @action(description='🚀 Run Ingestion Pipeline Now (Synchronous)')
+    def run_ingestion_now_action(self, request, queryset):
+        from apps.catalog.ingestion_service import run_ingestion_job
+        success_count = 0
+        for job in queryset:
+            try:
+                run_ingestion_job(job.id)
+                success_count += 1
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f"Job #{job.id} failed: {e}",
+                    level=messages.ERROR,
+                )
+        if success_count:
+            self.message_user(
+                request,
+                f"Successfully completed {success_count} ingestion job(s).",
+                level=messages.SUCCESS,
+            )
+
+    @action(description='🔄 Re-queue Ingestion Job (Celery / Background)')
+    def requeue_ingestion_action(self, request, queryset):
+        from apps.catalog.tasks import process_book_file
+        dispatched = 0
+        for job in queryset:
+            job.status = 'PENDING'
+            job.progress_percent = 0
+            job.current_step = 'Re-queued via admin...'
+            job.save()
+            try:
+                process_book_file.delay(job.id)
+                dispatched += 1
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f"Could not dispatch Celery task for Job #{job.id}: {e}",
+                    level=messages.WARNING,
+                )
+        if dispatched:
+            self.message_user(
+                request,
+                f"Dispatched {dispatched} ingestion job(s) to worker.",
+                level=messages.INFO,
+            )
 
 
 @admin.register(DailyPick)

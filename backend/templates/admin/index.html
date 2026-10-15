@@ -162,16 +162,22 @@
             </div>
 
             <!-- 8. Ingestion Pipeline KPI -->
-            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden">
+            <div class="bg-white dark:bg-base-900 border border-base-200 dark:border-base-800 rounded-xl p-4 shadow-xs relative overflow-hidden group hover:border-primary-500 transition-colors">
                 <div class="flex items-center justify-between text-base-500 dark:text-base-400 text-xs font-medium uppercase tracking-wider mb-2">
-                    <span>AI Ingestion Queue</span>
+                    <a href="{% url 'admin:catalog_contentingestionjob_changelist' %}" class="hover:text-primary-600 transition-colors flex items-center gap-1">
+                        <span>AI Ingestion Queue</span>
+                        <span class="material-symbols-outlined text-xs">arrow_forward</span>
+                    </a>
                     <span class="material-symbols-outlined text-rose-500 text-xl">smart_toy</span>
                 </div>
-                <div class="text-2xl font-bold text-base-900 dark:text-base-100">
-                    {{ kpi.pending_jobs|default:"0" }} <span class="text-xs font-normal text-base-500">pending</span>
+                <div class="text-2xl font-bold text-base-900 dark:text-base-100 flex items-baseline gap-2">
+                    {{ kpi.completed_jobs|default:"0" }} <span class="text-xs font-normal text-emerald-600 dark:text-emerald-400">completed</span>
+                    {% if kpi.pending_jobs > 0 %}
+                        <span class="text-xs font-normal text-amber-500">({{ kpi.pending_jobs }} pending)</span>
+                    {% endif %}
                 </div>
                 <div class="mt-2 text-xs {% if kpi.failed_jobs > 0 %}text-rose-600 dark:text-rose-400 font-semibold{% else %}text-base-500{% endif %}">
-                    {{ kpi.failed_jobs }} failed jobs · {{ kpi.total_badges_unlocked }} badges unlocked
+                    {{ kpi.failed_jobs }} failed · <a href="{% url 'admin:catalog_contentingestionjob_add' %}" class="text-primary-600 hover:underline font-medium">+ Ingest New Book</a>
                 </div>
             </div>
         </div>

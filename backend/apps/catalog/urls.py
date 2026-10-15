@@ -28,6 +28,11 @@ from .views import (
     UserLibraryListView,
     UserLibraryToggleView,
 )
+from .ingestion_views import (
+    ContentIngestionJobDetailView,
+    ContentIngestionJobListView,
+    ContentIngestionJobRetryView,
+)
 
 urlpatterns = [
     path('search/suggest/', SearchSuggestView.as_view(), name='search_suggest'),
@@ -55,5 +60,10 @@ urlpatterns = [
     path('spaces/<int:pk>/reorder/', UserReadingListReorderView.as_view(), name='user_reading_list_reorder'),
     path('spaces/share/<uuid:token>/', SharedReadingListDetailView.as_view(), name='shared_reading_list_detail'),
     path('spaces/share/<uuid:token>/clone/', SharedReadingListCloneView.as_view(), name='shared_reading_list_clone'),
+
+    # 1-Click Book Ingestion Engine (Creator / Admin)
+    path('ingest/', ContentIngestionJobListView.as_view(), name='ingest_list'),
+    path('ingest/<int:pk>/', ContentIngestionJobDetailView.as_view(), name='ingest_detail'),
+    path('ingest/<int:pk>/retry/', ContentIngestionJobRetryView.as_view(), name='ingest_retry'),
 ]
 
