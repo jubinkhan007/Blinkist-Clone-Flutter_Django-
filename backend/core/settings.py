@@ -180,7 +180,7 @@ if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Subscription / SSLCOMMERZ
+# Subscription / Payments & Monetization
 SUBSCRIPTION_PRICE_BDT = env.float('SUBSCRIPTION_PRICE_BDT', default=149.0)
 SSLCOMMERZ_STORE_ID = env('SSLCOMMERZ_STORE_ID', default='')
 SSLCOMMERZ_STORE_PASSWORD = env('SSLCOMMERZ_STORE_PASSWORD', default='')
@@ -190,6 +190,16 @@ MOBILE_APP_RETURN_URL = env(
     default='blinkist:/payment-return',
 )
 CANCEL_AT_PERIOD_END = env.bool('CANCEL_AT_PERIOD_END', default=True)
+
+# Stripe & In-App Purchases & Referral Monetization
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default='')
+STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default='')
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default='')
+APPLE_IAP_SHARED_SECRET = env('APPLE_IAP_SHARED_SECRET', default='')
+GOOGLE_PLAY_PACKAGE_NAME = env('GOOGLE_PLAY_PACKAGE_NAME', default='com.blinkist.clone')
+REFERRAL_DISCOUNT_PERCENT = env.int('REFERRAL_DISCOUNT_PERCENT', default=30)
+REFERRAL_BONUS_DAYS = env.int('REFERRAL_BONUS_DAYS', default=7)
+DEFAULT_TRIAL_DAYS = env.int('DEFAULT_TRIAL_DAYS', default=7)
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -352,6 +362,38 @@ UNFOLD = {
                         "title": "Saved Libraries",
                         "icon": "bookmark_added",
                         "link": lambda request: reverse_lazy("admin:catalog_userlibraryitem_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Monetization & Billing",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Subscription Plans",
+                        "icon": "credit_card",
+                        "link": lambda request: reverse_lazy("admin:subscriptions_subscriptionplan_changelist"),
+                    },
+                    {
+                        "title": "Discount & Referral Coupons",
+                        "icon": "loyalty",
+                        "link": lambda request: reverse_lazy("admin:subscriptions_discountcoupon_changelist"),
+                    },
+                    {
+                        "title": "Payment Transactions",
+                        "icon": "paid",
+                        "link": lambda request: reverse_lazy("admin:subscriptions_paymenttransaction_changelist"),
+                    },
+                    {
+                        "title": "Referral Profiles",
+                        "icon": "share",
+                        "link": lambda request: reverse_lazy("admin:subscriptions_userreferralprofile_changelist"),
+                    },
+                    {
+                        "title": "Coupon Redemptions",
+                        "icon": "redeem",
+                        "link": lambda request: reverse_lazy("admin:subscriptions_couponredemption_changelist"),
                     },
                 ],
             },
