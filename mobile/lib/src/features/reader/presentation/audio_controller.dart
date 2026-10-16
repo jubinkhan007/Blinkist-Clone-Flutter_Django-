@@ -807,6 +807,10 @@ class AudioController extends StateNotifier<AudioState> {
 
   Future<void> skipPrevious() => _handler.skipToPrevious();
 
+  Future<void> fastForward() => _handler.fastForward();
+
+  Future<void> rewind() => _handler.rewind();
+
   Future<void> jumpToSection(int index) async {
     if (index < 0 || index >= _sections.length) return;
 

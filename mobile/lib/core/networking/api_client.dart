@@ -12,6 +12,15 @@ String get kApiBaseUrl {
 }
 
 String resolveServerUrl(String url) {
+  if (url.startsWith('file://')) return url;
+  if (!kIsWeb && url.startsWith('/') && !url.startsWith('/media/') && !url.startsWith('/static/')) {
+    try {
+      if (File(url).existsSync()) {
+        return Uri.file(url).toString();
+      }
+    } catch (_) {}
+  }
+
   final parsed = Uri.tryParse(url);
   if (parsed == null) return url;
   if (parsed.hasScheme) return url;

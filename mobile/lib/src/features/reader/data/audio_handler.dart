@@ -7,6 +7,7 @@ import '../../../../core/networking/api_client.dart';
 class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _player = AudioPlayer();
   final _playlist = ConcatenatingAudioSource(children: []);
+  bool _playInterrupted = false;
 
   AppAudioHandler() {
     _init();
@@ -15,6 +16,44 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> _init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.speech());
+
+    // Interruption handling (calls, navigation ducking, alarms)
+    session.interruptionEventStream.listen((event) {
+      if (event.begin) {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            _player.setVolume(0.25);
+            break;
+          case AudioInterruptionType.pause:
+          case AudioInterruptionType.unknown:
+            if (_player.playing) {
+              _playInterrupted = true;
+              _player.pause();
+            }
+            break;
+        }
+      } else {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            _player.setVolume(1.0);
+            break;
+          case AudioInterruptionType.pause:
+            if (_playInterrupted) {
+              _playInterrupted = false;
+              _player.play();
+            }
+            break;
+          case AudioInterruptionType.unknown:
+            _playInterrupted = false;
+            break;
+        }
+      }
+    });
+
+    // Auto-pause when headphones unplugged or Bluetooth disconnected
+    session.becomingNoisyEventStream.listen((_) {
+      _player.pause();
+    });
 
     // Broadcast state changes from the player to audio_service
     _player.playbackEventStream.listen(_broadcastState);
@@ -26,6 +65,15 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       }
     });
 
+    // Real-time duration sync for lock-screen scrubbers
+    _player.durationStream.listen((duration) {
+      if (duration != null && mediaItem.value != null) {
+        if (mediaItem.value!.duration != duration) {
+          mediaItem.add(mediaItem.value!.copyWith(duration: duration));
+        }
+      }
+    });
+
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         // Just_audio handles sequence automatically
@@ -33,7 +81,7 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
-  /// Broadcasts the current player state to the system.
+  /// Broadcasts the current player state to the system lock-screen and notifications.
   void _broadcastState(PlaybackEvent event) {
     final playing = _player.playing;
     playbackState.add(playbackState.value.copyWith(
@@ -53,7 +101,7 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         MediaAction.skipToNext,
         MediaAction.skipToPrevious,
       },
-      androidCompactActionIndices: const [1, 2, 3],
+      androidCompactActionIndices: const [0, 2, 4], // Rewind 15s, Play/Pause, FastForward 15s
       processingState: const {
         ProcessingState.idle: AudioProcessingState.idle,
         ProcessingState.loading: AudioProcessingState.loading,
@@ -70,35 +118,96 @@ class AppAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    final session = await AudioSession.instance;
+    await session.setActive(true);
+    return _player.play();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() {
+    _playInterrupted = false;
+    return _player.pause();
+  }
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() async {
+    _playInterrupted = false;
+    await _player.stop();
+    final session = await AudioSession.instance;
+    await session.setActive(false);
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
   Future<void> fastForward() async {
-    final newPos = _player.position + const Duration(seconds: 30);
+    final current = _player.position;
     final total = _player.duration;
-    if (total != null && newPos > total) {
+    final target = current + const Duration(seconds: 15);
+    if (total != null && target > total) {
       await _player.seek(total);
     } else {
-      await _player.seek(newPos);
+      await _player.seek(target);
     }
   }
 
   @override
   Future<void> rewind() async {
-    final newPos = _player.position - const Duration(seconds: 15);
-    if (newPos.isNegative) {
+    final current = _player.position;
+    final target = current - const Duration(seconds: 15);
+    if (target.isNegative) {
       await _player.seek(Duration.zero);
     } else {
-      await _player.seek(newPos);
+      await _player.seek(target);
+    }
+  }
+
+  @override
+  Future<void> seekForward(bool begin) async {
+    if (begin) {
+      await fastForward();
+    }
+  }
+
+  @override
+  Future<void> seekBackward(bool begin) async {
+    if (begin) {
+      await rewind();
+    }
+  }
+
+  @override
+  Future<void> click([MediaButton button = MediaButton.media]) async {
+    switch (button) {
+      case MediaButton.media:
+        if (_player.playing) {
+          await pause();
+        } else {
+          await play();
+        }
+        break;
+      case MediaButton.next:
+        await skipToNext();
+        break;
+      case MediaButton.previous:
+        await skipToPrevious();
+        break;
+    }
+  }
+
+  @override
+  Future<dynamic> customAction(String name, [Map<String, dynamic>? extras]) async {
+    switch (name) {
+      case 'skip15Forward':
+        await fastForward();
+        return true;
+      case 'skip15Backward':
+        await rewind();
+        return true;
+      default:
+        return super.customAction(name, extras);
     }
   }
 

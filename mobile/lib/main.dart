@@ -17,9 +17,15 @@ void main() async {
   final audioHandler = await AudioService.init(
     builder: () => AppAudioHandler(),
     config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.example.mobile.channel.audio',
-      androidNotificationChannelName: 'Audio Playback',
+      androidNotificationChannelId: 'com.blinkist.clone.audio',
+      androidNotificationChannelName: 'Blinkist Audio Narration',
+      androidNotificationChannelDescription: 'Blinkist audio summaries and narrated blinks',
+      androidNotificationIcon: 'mipmap/ic_launcher',
+      notificationColor: Color(0xFF2CE080),
+      androidShowNotificationBadge: true,
       androidStopForegroundOnPause: true,
+      fastForwardInterval: Duration(seconds: 15),
+      rewindInterval: Duration(seconds: 15),
     ),
   );
 

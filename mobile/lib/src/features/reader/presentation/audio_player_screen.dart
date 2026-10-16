@@ -1698,12 +1698,7 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                       // Seek back 15s
                       _SeekButton(
                         seconds: -15,
-                        onTap: () {
-                          final newPos = position - const Duration(seconds: 15);
-                          controller.seek(
-                            newPos.isNegative ? Duration.zero : newPos,
-                          );
-                        },
+                        onTap: () => controller.rewind(),
                       ),
                       // Play / Pause
                       audioState.isLoading
@@ -1721,17 +1716,10 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                               ),
                               onPressed: () => controller.togglePlayPause(),
                             ),
-                      // Seek forward 30s
+                      // Seek forward 15s
                       _SeekButton(
-                        seconds: 30,
-                        onTap: () {
-                          final newPos = position + const Duration(seconds: 30);
-                          controller.seek(
-                            uiDuration == Duration.zero
-                                ? newPos
-                                : (newPos > uiDuration ? uiDuration : newPos),
-                          );
-                        },
+                        seconds: 15,
+                        onTap: () => controller.fastForward(),
                       ),
                       // Chapters list
                       IconButton(
@@ -1770,9 +1758,30 @@ class _SeekButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isForward = seconds > 0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Icon(isForward ? Icons.forward_30 : Icons.replay_10, size: 36),
+    return IconButton(
+      tooltip: isForward ? 'Fast forward 15 seconds' : 'Rewind 15 seconds',
+      iconSize: 36,
+      icon: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            isForward ? Icons.rotate_right_rounded : Icons.rotate_left_rounded,
+            size: 36,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: Text(
+              '15',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onPressed: onTap,
     );
   }
 }
