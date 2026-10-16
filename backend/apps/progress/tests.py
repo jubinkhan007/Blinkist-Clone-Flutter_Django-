@@ -312,4 +312,84 @@ class ActionPlanApiTests(APITestCase):
         self.assertEqual(ics_res['Content-Type'], 'text/calendar; charset=utf-8')
 
 
+class BulkProgressSyncTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='bulksync@example.com',
+            username='bulksyncuser',
+            password='secret123',
+        )
+        self.client.force_authenticate(self.user)
+        author = Author.objects.create(name='Sync Author')
+        self.book = Book.objects.create(
+            title='Sync Book',
+            slug='sync-book',
+            author=author,
+        )
+        from apps.summaries.models import SummarySection
+        self.section1 = SummarySection.objects.create(
+            book=self.book,
+            title='Section 1',
+            slug='sec-1',
+            order=1,
+            content='Content 1',
+        )
+        self.section2 = SummarySection.objects.create(
+            book=self.book,
+            title='Section 2',
+            slug='sec-2',
+            order=2,
+            content='Content 2',
+        )
+
+    def test_bulk_sync_progress(self):
+        payload = {
+            'items': [
+                {
+                    'type': 'section_read',
+                    'book_slug': self.book.slug,
+                    'section_slug': self.section1.slug,
+                },
+                {
+                    'type': 'audio_progress',
+                    'book_id': self.book.id,
+                    'section_id': self.section1.id,
+                    'position_seconds': 145.0,
+                    'is_finished': False,
+                },
+                {
+                    'type': 'full_book_progress',
+                    'book_id': self.book.id,
+                    'current_page': 25,
+                    'current_offset': 0.5,
+                },
+                {
+                    'type': 'reading_activity',
+                    'reading_minutes': 10,
+                    'audio_minutes': 5,
+                    'sections_read': 1,
+                    'books_completed': 0,
+                },
+            ]
+        }
+        res = self.client.post(reverse('progress_sync'), payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['success'])
+        self.assertEqual(res.data['processed_count'], 4)
+        self.assertGreaterEqual(res.data['current_streak'], 1)
+
+        from apps.progress.models import UserSectionProgress, UserAudioProgress, UserFullBookProgress
+        self.assertTrue(
+            UserSectionProgress.objects.filter(
+                user=self.user, section=self.section1, is_completed=True
+            ).exists()
+        )
+        audio = UserAudioProgress.objects.get(user=self.user, book=self.book)
+        self.assertEqual(audio.current_position_seconds, 145.0)
+
+        full = UserFullBookProgress.objects.get(user=self.user, book=self.book)
+        self.assertEqual(full.current_page, 25)
+
+
+
 

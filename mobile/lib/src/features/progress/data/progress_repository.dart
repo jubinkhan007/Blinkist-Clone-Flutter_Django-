@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../core/networking/api_client.dart';
+import '../../../../core/storage/local_cache_database.dart';
 import '../domain/reading_stats_models.dart';
 
 part 'progress_repository.g.dart';
@@ -80,24 +81,72 @@ class UserFullBookProgress {
 
 class ProgressRepository {
   final Dio _dio;
+  final LocalCacheDatabase? _cacheDb;
 
-  ProgressRepository({required Dio dio}) : _dio = dio;
+  ProgressRepository({required Dio dio, LocalCacheDatabase? cacheDb})
+      : _dio = dio,
+        _cacheDb = cacheDb;
 
   Future<UserSummaryProgress> getBookProgress(int bookId) async {
-    final response = await _dio.get('/progress/books/$bookId/');
-    return UserSummaryProgress.fromJson(response.data);
+    try {
+      final response = await _dio.get('/progress/books/$bookId/');
+      return UserSummaryProgress.fromJson(response.data);
+    } catch (_) {
+      return UserSummaryProgress(
+        id: 0,
+        bookId: bookId,
+        completedSectionsCount: 0,
+      );
+    }
   }
 
-  Future<UserSummaryProgress> markSectionRead(int bookId, int sectionId) async {
-    final response = await _dio.post(
-      '/progress/books/$bookId/section/$sectionId/',
-    );
-    return UserSummaryProgress.fromJson(response.data);
+  Future<UserSummaryProgress> markSectionRead(
+    int bookId,
+    int sectionId, {
+    String? bookSlug,
+  }) async {
+    if (bookSlug != null) {
+      await _cacheDb?.saveLocalProgress(
+        bookSlug: bookSlug,
+        bookId: bookId,
+      );
+    }
+
+    try {
+      final response = await _dio.post(
+        '/progress/books/$bookId/section/$sectionId/',
+      );
+      return UserSummaryProgress.fromJson(response.data);
+    } catch (e) {
+      // Offline fallback: enqueue into sync queue
+      await _cacheDb?.enqueueSyncAction('section_read', {
+        'book_id': bookId,
+        'section_id': sectionId,
+        if (bookSlug != null) 'book_slug': bookSlug,
+      });
+
+      return UserSummaryProgress(
+        id: 0,
+        bookId: bookId,
+        currentSectionId: sectionId,
+        completedSectionsCount: 1,
+      );
+    }
   }
 
   Future<UserAudioProgress> getAudioProgress(int bookId) async {
-    final response = await _dio.get('/progress/books/$bookId/audio/');
-    return UserAudioProgress.fromJson(response.data);
+    try {
+      final response = await _dio.get('/progress/books/$bookId/audio/');
+      return UserAudioProgress.fromJson(response.data);
+    } catch (_) {
+      return UserAudioProgress(
+        id: 0,
+        bookId: bookId,
+        currentSectionId: null,
+        currentPositionSeconds: 0.0,
+        isFinished: false,
+      );
+    }
   }
 
   Future<UserAudioProgress> saveAudioProgress({
@@ -105,33 +154,89 @@ class ProgressRepository {
     required int sectionId,
     required double positionSeconds,
     required bool isFinished,
+    String? bookSlug,
   }) async {
-    final response = await _dio.post(
-      '/progress/books/$bookId/audio/',
-      data: {
+    if (bookSlug != null) {
+      await _cacheDb?.saveLocalProgress(
+        bookSlug: bookSlug,
+        bookId: bookId,
+        audioSectionId: sectionId,
+        audioPositionSeconds: positionSeconds,
+        isCompleted: isFinished,
+      );
+    }
+
+    try {
+      final response = await _dio.post(
+        '/progress/books/$bookId/audio/',
+        data: {
+          'section_id': sectionId,
+          'position_seconds': positionSeconds,
+          'is_finished': isFinished,
+        },
+      );
+      return UserAudioProgress.fromJson(response.data);
+    } catch (e) {
+      // Offline fallback: enqueue into sync queue
+      await _cacheDb?.enqueueSyncAction('audio_progress', {
+        'book_id': bookId,
         'section_id': sectionId,
         'position_seconds': positionSeconds,
         'is_finished': isFinished,
-      },
-    );
-    return UserAudioProgress.fromJson(response.data);
+        if (bookSlug != null) 'book_slug': bookSlug,
+      });
+
+      return UserAudioProgress(
+        id: 0,
+        bookId: bookId,
+        currentSectionId: sectionId,
+        currentPositionSeconds: positionSeconds,
+        isFinished: isFinished,
+      );
+    }
   }
 
   Future<UserFullBookProgress> getFullBookProgress(int bookId) async {
-    final response = await _dio.get('/progress/books/$bookId/full/');
-    return UserFullBookProgress.fromJson(response.data);
+    try {
+      final response = await _dio.get('/progress/books/$bookId/full/');
+      return UserFullBookProgress.fromJson(response.data);
+    } catch (_) {
+      return UserFullBookProgress(
+        id: 0,
+        bookId: bookId,
+        currentPage: 0,
+        currentOffset: 0.0,
+      );
+    }
   }
 
   Future<UserFullBookProgress> saveFullBookProgress({
     required int bookId,
     required int currentPage,
     required double currentOffset,
+    String? bookSlug,
   }) async {
-    final response = await _dio.post(
-      '/progress/books/$bookId/full/',
-      data: {'current_page': currentPage, 'current_offset': currentOffset},
-    );
-    return UserFullBookProgress.fromJson(response.data);
+    try {
+      final response = await _dio.post(
+        '/progress/books/$bookId/full/',
+        data: {'current_page': currentPage, 'current_offset': currentOffset},
+      );
+      return UserFullBookProgress.fromJson(response.data);
+    } catch (e) {
+      await _cacheDb?.enqueueSyncAction('full_book_progress', {
+        'book_id': bookId,
+        'current_page': currentPage,
+        'current_offset': currentOffset,
+        if (bookSlug != null) 'book_slug': bookSlug,
+      });
+
+      return UserFullBookProgress(
+        id: 0,
+        bookId: bookId,
+        currentPage: currentPage,
+        currentOffset: currentOffset,
+      );
+    }
   }
 
   Future<UserReadingStats> getReadingStats() async {
@@ -173,7 +278,8 @@ class ProgressRepository {
 @riverpod
 ProgressRepository progressRepository(ProgressRepositoryRef ref) {
   final dio = ref.watch(dioProvider);
-  return ProgressRepository(dio: dio);
+  final cacheDb = ref.watch(localCacheDatabaseProvider);
+  return ProgressRepository(dio: dio, cacheDb: cacheDb);
 }
 
 final readingStatsProvider = FutureProvider<UserReadingStats>((ref) async {

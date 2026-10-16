@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from django.db import models
+from django.db import models, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -178,6 +178,134 @@ class RecordActivityView(views.APIView):
             'longest_streak': request.user.longest_streak,
             'last_active_date': request.user.last_active_date,
             'is_active_today': True,
+        })
+
+
+class BulkProgressSyncView(views.APIView):
+    """
+    POST /api/v1/progress/sync/
+    Processes batched offline sync actions from mobile clients:
+    - section_read (book_id or book_slug, section_id or section_slug)
+    - audio_progress (book_id or book_slug, section_id, position_seconds, is_finished)
+    - full_book_progress (book_id or book_slug, current_page, total_pages, current_offset, is_completed)
+    - reading_activity (reading_minutes, audio_minutes, sections_read, books_completed)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        items = request.data.get('items', [])
+        if not isinstance(items, list):
+            return response.Response(
+                {'error': 'Payload must include an "items" list'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        processed_count = 0
+        total_reading_mins = 0
+        total_audio_mins = 0
+        total_sections_read = 0
+        total_books_completed = 0
+
+        with transaction.atomic():
+            for item in items:
+                action_type = item.get('type')
+                book_id = item.get('book_id')
+                book_slug = item.get('book_slug')
+
+                book = None
+                if book_id:
+                    book = Book.objects.filter(id=book_id).first()
+                elif book_slug:
+                    book = Book.objects.filter(slug=book_slug).first()
+
+                if action_type == 'section_read' and book:
+                    section_id = item.get('section_id')
+                    section_slug = item.get('section_slug')
+                    section = None
+                    if section_id:
+                        section = SummarySection.objects.filter(id=section_id, book=book).first()
+                    elif section_slug:
+                        section = SummarySection.objects.filter(slug=section_slug, book=book).first()
+
+                    if section:
+                        UserSectionProgress.objects.update_or_create(
+                            user=request.user,
+                            section=section,
+                            defaults={'is_completed': True},
+                        )
+                        summary_prog, _ = UserSummaryProgress.objects.get_or_create(
+                            user=request.user, book=book
+                        )
+                        summary_prog.current_section = section
+                        completed_cnt = UserSectionProgress.objects.filter(
+                            user=request.user, section__book=book, is_completed=True
+                        ).count()
+                        summary_prog.completed_sections_count = completed_cnt
+                        summary_prog.save()
+                        total_sections_read += 1
+                        total_reading_mins += 3
+                        if book.sections.count() > 0 and completed_cnt >= book.sections.count():
+                            total_books_completed += 1
+                        processed_count += 1
+
+                elif action_type == 'audio_progress' and book:
+                    section_id = item.get('section_id')
+                    position_seconds = float(item.get('position_seconds', 0.0) or 0.0)
+                    is_finished = bool(item.get('is_finished', False))
+
+                    section = None
+                    if section_id:
+                        section = SummarySection.objects.filter(id=section_id, book=book).first()
+
+                    audio_prog, _ = UserAudioProgress.objects.get_or_create(
+                        user=request.user, book=book
+                    )
+                    delta_secs = max(0.0, position_seconds - audio_prog.current_position_seconds)
+                    if delta_secs >= 30:
+                        total_audio_mins += int(round(delta_secs / 60.0))
+
+                    audio_prog.current_section = section
+                    audio_prog.current_position_seconds = position_seconds
+                    audio_prog.is_finished = is_finished
+                    audio_prog.save()
+                    if is_finished:
+                        total_books_completed += 1
+                    processed_count += 1
+
+                elif action_type == 'full_book_progress' and book:
+                    full_prog, _ = UserFullBookProgress.objects.get_or_create(
+                        user=request.user, book=book
+                    )
+                    full_prog.current_page = int(item.get('current_page', 0) or 0)
+                    full_prog.current_offset = float(item.get('current_offset', 0.0) or 0.0)
+                    full_prog.save()
+                    processed_count += 1
+
+                elif action_type == 'reading_activity':
+                    total_reading_mins += int(item.get('reading_minutes', 0) or 0)
+                    total_audio_mins += int(item.get('audio_minutes', 0) or 0)
+                    total_sections_read += int(item.get('sections_read', 0) or 0)
+                    total_books_completed += int(item.get('books_completed', 0) or 0)
+                    processed_count += 1
+
+            record_activity(
+                request.user,
+                reading_minutes=total_reading_mins,
+                audio_minutes=total_audio_mins,
+                sections_read=total_sections_read,
+                books_completed=total_books_completed,
+            )
+
+        new_badges = evaluate_and_award_badges(request.user)
+        today = timezone.localdate()
+
+        return response.Response({
+            'success': True,
+            'processed_count': processed_count,
+            'current_streak': request.user.get_current_streak(today=today),
+            'longest_streak': request.user.longest_streak,
+            'new_badges_awarded': len(new_badges),
+            'server_timestamp': timezone.now().isoformat(),
         })
 
 

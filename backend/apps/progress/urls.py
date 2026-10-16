@@ -12,9 +12,11 @@ from .views import (
     ActionPlanDetailView,
     ActionPlanItemToggleView,
     ActionPlanExportView,
+    BulkProgressSyncView,
 )
 
 urlpatterns = [
+    path('sync/', BulkProgressSyncView.as_view(), name='progress_sync'),
     path('stats/', UserReadingStatsView.as_view(), name='reading_stats'),
     path('badges/', UserBadgesView.as_view(), name='user_badges'),
     path('activity/', RecordActivityView.as_view(), name='record_activity'),

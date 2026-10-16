@@ -20,6 +20,7 @@ import '../data/reading_list_repository.dart';
 import '../domain/reading_list_models.dart';
 import '../../progress/data/action_plan_repository.dart';
 import '../../progress/domain/action_plan_models.dart';
+import '../../../../core/sync/background_sync_service.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   final String? initialTab;
@@ -159,6 +160,8 @@ class _DownloadsTab extends ConsumerWidget {
     final failedTasks = downloads.values.where((t) => t.isFailed).toList();
     final totalStorageStr = ref.watch(formattedTotalStorageProvider);
     final notifier = ref.read(offlineDownloadsProvider.notifier);
+    final syncStatus = ref.watch(backgroundSyncServiceProvider);
+    final syncNotifier = ref.read(backgroundSyncServiceProvider.notifier);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -212,6 +215,82 @@ class _DownloadsTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       children: [
+        // 0. Cloud Sync Status Card
+        Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: syncStatus.state == SyncState.offline
+                ? Colors.amber.withValues(alpha: 0.12)
+                : syncStatus.pendingCount > 0
+                ? colorScheme.primaryContainer.withValues(alpha: 0.3)
+                : colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: syncStatus.pendingCount > 0
+                  ? colorScheme.primary.withValues(alpha: 0.3)
+                  : colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                syncStatus.state == SyncState.syncing
+                    ? Icons.sync
+                    : syncStatus.pendingCount > 0
+                    ? Icons.cloud_upload_outlined
+                    : Icons.cloud_done_outlined,
+                color: syncStatus.state == SyncState.syncing
+                    ? colorScheme.primary
+                    : syncStatus.pendingCount > 0
+                    ? colorScheme.primary
+                    : Colors.green.shade600,
+                size: 22,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      syncStatus.state == SyncState.syncing
+                          ? 'Syncing offline progress...'
+                          : syncStatus.pendingCount > 0
+                          ? '${syncStatus.pendingCount} offline change${syncStatus.pendingCount == 1 ? '' : 's'} queued'
+                          : 'All progress synced with cloud',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      syncStatus.lastSyncedAt != null
+                          ? 'Last sync: ${syncStatus.lastSyncedAt!.hour.toString().padLeft(2, '0')}:${syncStatus.lastSyncedAt!.minute.toString().padLeft(2, '0')}'
+                          : 'Automatic background sync active',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.tonal(
+                onPressed: syncStatus.state == SyncState.syncing
+                    ? null
+                    : () => syncNotifier.syncPendingMutations(),
+                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: syncStatus.state == SyncState.syncing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Sync Now'),
+              ),
+            ],
+          ),
+        ),
+
         // 1. Storage Overview Header
         if (completedTasks.isNotEmpty) ...[
           Container(
