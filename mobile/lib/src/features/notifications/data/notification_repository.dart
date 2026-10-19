@@ -92,6 +92,23 @@ class NotificationRepository {
     final response = await _dio.patch('/notifications/preferences/', data: payload);
     return NotificationPreferences.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<void> registerDeviceToken(String fcmToken) async {
+    try {
+      await _dio.post(
+        '/notifications/register-token/',
+        data: {'fcm_token': fcmToken},
+      );
+    } catch (_) {}
+  }
+
+  Future<void> dispatchMorningDigest() async {
+    await _dio.post('/notifications/dispatch-morning-digest/');
+  }
+
+  Future<void> dispatchEveningStreak() async {
+    await _dio.post('/notifications/dispatch-evening-streak/');
+  }
 }
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {

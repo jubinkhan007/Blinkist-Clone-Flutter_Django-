@@ -6,8 +6,10 @@ import datetime
 class Notification(models.Model):
     class NotificationType(models.TextChoices):
         DAILY_PICK = 'daily_pick', 'Daily Pick'
+        DAILY_DIGEST = 'daily_digest', 'Daily Digest'
         STREAK_REMINDER = 'streak_reminder', 'Streak Reminder'
         NEW_BOOK = 'new_book', 'New Content'
+        RECOMMENDATION = 'recommendation', 'Personalized Pick'
         SUBSCRIPTION = 'subscription', 'Subscription'
         SYSTEM = 'system', 'System'
 

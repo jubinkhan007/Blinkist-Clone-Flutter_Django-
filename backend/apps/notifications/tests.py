@@ -5,10 +5,14 @@ from django.utils import timezone
 from datetime import date, timedelta
 
 from apps.catalog.models import Book, Author, Category, DailyPick, Collection
+from apps.media.models import DailyAudioDigest, DailyAudioDigestItem
+from apps.progress.models import UserBookProgress
 from .models import Notification, NotificationPreference
 from .tasks import (
     dispatch_daily_pick_notifications,
+    dispatch_daily_digest_notifications,
     dispatch_streak_reminder_notifications,
+    dispatch_evening_streak_saver_notifications,
     dispatch_new_book_notifications,
     dispatch_collection_notifications,
 )
@@ -210,4 +214,107 @@ class NotificationApiTests(APITestCase):
         ).first()
         self.assertIsNotNone(notif)
         self.assertIn('Productivity Masterclass', notif.title)
+
+    def test_register_device_token_endpoint(self):
+        url = reverse('notification_register_token')
+        resp = self.client.post(url, {'fcm_token': 'fcm_test_token_999'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['status'], 'token_registered')
+
+        pref = NotificationPreference.objects.get(user=self.user)
+        self.assertEqual(pref.fcm_token, 'fcm_test_token_999')
+
+    def test_dispatch_morning_daily_digest_task(self):
+        today = timezone.localdate()
+        digest = DailyAudioDigest.objects.create(
+            date=today,
+            title="Daily Blink • Morning Digest",
+            theme="Focus, Habits & Mental Agility",
+            total_duration_seconds=900,
+        )
+
+        pref, _ = NotificationPreference.objects.get_or_create(user=self.user)
+        pref.daily_pick_enabled = True
+        pref.fcm_token = 'device-token-123'
+        pref.save()
+
+        count = dispatch_daily_digest_notifications()
+        self.assertGreaterEqual(count, 1)
+
+        notif = Notification.objects.filter(
+            user=self.user,
+            notification_type=Notification.NotificationType.DAILY_DIGEST,
+        ).first()
+        self.assertIsNotNone(notif)
+        self.assertIn("Focus, Habits & Mental Agility", notif.title)
+        self.assertIn("/daily-blink?autoplay=true", notif.action_url)
+
+        # Ensure calling again does not create duplicate notification
+        dup_count = dispatch_daily_digest_notifications()
+        self.assertEqual(dup_count, 0)
+
+    def test_dispatch_evening_streak_saver_with_personalized_recommendation(self):
+        cat_psych = Category.objects.create(name='Psychology', slug='psychology')
+        author = Author.objects.create(name='Daniel Kahneman')
+
+        # User finished reading Book 1 in Psychology
+        book_finished = Book.objects.create(
+            title='Thinking, Fast and Slow',
+            slug='thinking-fast-and-slow',
+            author=author,
+            description='System 1 and System 2',
+        )
+        book_finished.categories.add(cat_psych)
+
+        UserBookProgress.objects.create(
+            user=self.user,
+            book=book_finished,
+            percent_complete=100,
+            is_completed=True,
+        )
+
+        # Candidate recommendation book in Psychology
+        book_rec = Book.objects.create(
+            title='Noise',
+            slug='noise-a-flaw-in-human-judgment',
+            author=author,
+            description='Flaws in human judgment',
+            rating=4.9,
+        )
+        book_rec.categories.add(cat_psych)
+
+        # Set user streak to 4 days, with no reading today
+        self.user.current_streak = 4
+        self.user.last_active_date = timezone.localdate() - timedelta(days=1)
+        self.user.save()
+
+        pref, _ = NotificationPreference.objects.get_or_create(user=self.user)
+        pref.streak_reminder_enabled = True
+        pref.fcm_token = 'streak-token-456'
+        pref.save()
+
+        count = dispatch_evening_streak_saver_notifications()
+        self.assertGreaterEqual(count, 1)
+
+        notif = Notification.objects.filter(
+            user=self.user,
+            notification_type=Notification.NotificationType.STREAK_REMINDER,
+        ).first()
+        self.assertIsNotNone(notif)
+        self.assertIn("Protect your 4-day streak", notif.title)
+        self.assertIn("Noise", notif.message)
+        self.assertIn("Psychology", notif.message)
+        self.assertEqual(notif.action_url, f"/books/{book_rec.slug}/read")
+
+    def test_dispatch_endpoints_api(self):
+        url_morning = reverse('notification_dispatch_morning_digest')
+        resp_m = self.client.post(url_morning)
+        self.assertEqual(resp_m.status_code, 200)
+        self.assertEqual(resp_m.data['status'], 'morning_digest_dispatched')
+
+        url_evening = reverse('notification_dispatch_evening_streak')
+        resp_e = self.client.post(url_evening)
+        self.assertEqual(resp_e.status_code, 200)
+        self.assertEqual(resp_e.data['status'], 'evening_streak_saver_dispatched')
+
 

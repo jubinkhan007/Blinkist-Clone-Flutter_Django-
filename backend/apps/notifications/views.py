@@ -97,3 +97,52 @@ class SimulateNotificationView(views.APIView):
             status=status.HTTP_201_CREATED,
         )
 
+
+class RegisterDeviceTokenView(views.APIView):
+    """Allows mobile client to register or update their FCM / APNs device push token."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        fcm_token = request.data.get('fcm_token', '').strip()
+        if not fcm_token:
+            return response.Response(
+                {'error': 'fcm_token is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
+        pref.fcm_token = fcm_token
+        pref.save(update_fields=['fcm_token', 'updated_at'])
+
+        return response.Response({
+            'status': 'token_registered',
+            'fcm_token': fcm_token,
+        })
+
+
+class DispatchMorningDigestView(views.APIView):
+    """Admin/developer trigger to dispatch morning Daily Digest alerts immediately."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from .tasks import dispatch_daily_digest_notifications
+        count = dispatch_daily_digest_notifications()
+        return response.Response({
+            'status': 'morning_digest_dispatched',
+            'created_count': count,
+        })
+
+
+class DispatchEveningStreakView(views.APIView):
+    """Admin/developer trigger to dispatch evening streak-saver reminders with recommendations."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from .tasks import dispatch_evening_streak_saver_notifications
+        count = dispatch_evening_streak_saver_notifications()
+        return response.Response({
+            'status': 'evening_streak_saver_dispatched',
+            'created_count': count,
+        })
+
+

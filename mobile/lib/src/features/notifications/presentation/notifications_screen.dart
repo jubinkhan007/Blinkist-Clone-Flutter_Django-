@@ -189,9 +189,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       case 'unread':
         return list.where((n) => !n.isRead).toList();
       case 'daily_pick':
-        return list.where((n) => n.notificationType == 'daily_pick').toList();
+        return list
+            .where((n) =>
+                n.notificationType == 'daily_pick' ||
+                n.notificationType == 'daily_digest')
+            .toList();
       case 'streak_reminder':
-        return list.where((n) => n.notificationType == 'streak_reminder').toList();
+        return list
+            .where((n) =>
+                n.notificationType == 'streak_reminder' ||
+                n.notificationType == 'recommendation')
+            .toList();
       case 'new_book':
         return list.where((n) => n.notificationType == 'new_book').toList();
       case 'system':
@@ -402,6 +410,18 @@ class _NotificationCard extends ConsumerWidget {
           Colors.amber.shade800,
           Colors.amber.withValues(alpha: 0.18),
         );
+      case 'daily_digest':
+        return (
+          Icons.coffee_rounded,
+          const Color(0xFFEA580C),
+          const Color(0xFFEA580C).withValues(alpha: 0.18),
+        );
+      case 'recommendation':
+        return (
+          Icons.auto_awesome_rounded,
+          const Color(0xFF2CE080),
+          const Color(0xFF2CE080).withValues(alpha: 0.18),
+        );
       case 'streak_reminder':
         return (
           Icons.local_fire_department_rounded,
@@ -544,6 +564,69 @@ class _NotificationPreferencesSheetState
                           await _updatePreferences(reminderTime: formatted);
                         }
                       },
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 24),
+              Text(
+                'Instant Triggers & Testing',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.coffee_rounded, size: 16),
+                      label: const Text('Morning Blink'),
+                      onPressed: () async {
+                        try {
+                          await ref.read(notificationRepositoryProvider).dispatchMorningDigest();
+                          ref.invalidate(notificationsProvider);
+                          ref.invalidate(unreadNotificationCountProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Morning Daily Blink alert triggered!')),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.local_fire_department_rounded, size: 16),
+                      label: const Text('Streak Saver'),
+                      onPressed: () async {
+                        try {
+                          await ref.read(notificationRepositoryProvider).dispatchEveningStreak();
+                          ref.invalidate(notificationsProvider);
+                          ref.invalidate(unreadNotificationCountProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Evening streak-saver reminder triggered!')),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
             ],
