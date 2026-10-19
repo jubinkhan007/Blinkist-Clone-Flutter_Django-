@@ -64,6 +64,26 @@
             </intent-filter>
         </receiver>
 
+        <!-- Home Screen Widget: Daily Audio Blink -->
+        <receiver android:name=".DailyBlinkWidgetProvider"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/widget_daily_blink_info" />
+        </receiver>
+
+        <!-- Home Screen Widget: Reading Streak, Goal & Active Habit -->
+        <receiver android:name=".StreakGoalWidgetProvider"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/widget_streak_goal_info" />
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

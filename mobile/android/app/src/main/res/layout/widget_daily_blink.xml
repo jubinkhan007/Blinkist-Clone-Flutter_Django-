@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="16dp">
+
+    <!-- Top Status Row -->
+    <LinearLayout
+        android:id="@+id/widget_header_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_badge_bg"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:text="DAILY BLINK ☕"
+            android:textColor="#FF9800"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_theme"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="MORNING DIGEST"
+            android:textColor="#94A3B8"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_minutes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="15 min"
+            android:textColor="#2CE080"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Play Button (Right) -->
+    <FrameLayout
+        android:id="@+id/widget_play_btn"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/widget_play_button_bg">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:contentDescription="Play Daily Blink"
+            android:src="@drawable/ic_widget_play" />
+    </FrameLayout>
+
+    <!-- Book Information & Key Insight (Left of Play Button) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_header_row"
+        android:layout_centerVertical="true"
+        android:layout_marginTop="8dp"
+        android:layout_toStartOf="@id/widget_play_btn"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Atomic Habits"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_author"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="James Clear"
+            android:textColor="#94A3B8"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_prompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="1-tap play morning audio digest"
+            android:textColor="#2CE080"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+</RelativeLayout>

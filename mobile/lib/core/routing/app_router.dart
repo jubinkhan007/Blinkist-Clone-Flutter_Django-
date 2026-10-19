@@ -126,11 +126,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/daily-blink',
-        builder: (context, state) => const DailyBlinkScreen(),
+        builder: (context, state) {
+          final autoPlay = state.uri.queryParameters['autoplay'] == 'true';
+          return DailyBlinkScreen(autoPlayOnLaunch: autoPlay);
+        },
       ),
       GoRoute(
         path: '/daily-digest',
         redirect: (context, state) => '/daily-blink',
+      ),
+      GoRoute(
+        path: '/play-daily-digest',
+        redirect: (context, state) => '/daily-blink?autoplay=true',
+      ),
+      GoRoute(
+        path: '/action-plans',
+        redirect: (context, state) => '/library?tab=plans',
       ),
       GoRoute(
         path: '/action-plans/:id',

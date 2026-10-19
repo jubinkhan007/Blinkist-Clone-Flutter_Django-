@@ -5,16 +5,44 @@ import 'package:mobile/core/networking/api_client.dart';
 import '../../reader/presentation/audio_controller.dart';
 import '../data/daily_digest_repository.dart';
 
-class DailyBlinkScreen extends ConsumerWidget {
-  const DailyBlinkScreen({super.key});
+class DailyBlinkScreen extends ConsumerStatefulWidget {
+  final bool autoPlayOnLaunch;
+  const DailyBlinkScreen({super.key, this.autoPlayOnLaunch = false});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DailyBlinkScreen> createState() => _DailyBlinkScreenState();
+}
+
+class _DailyBlinkScreenState extends ConsumerState<DailyBlinkScreen> {
+  bool _hasAutoPlayed = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final digestAsync = ref.watch(dailyDigestProvider);
     final audioState = ref.watch(audioControllerProvider);
     final controller = ref.read(audioControllerProvider.notifier);
+
+    if (widget.autoPlayOnLaunch && !_hasAutoPlayed) {
+      digestAsync.whenData((digest) {
+        if (digest != null && digest.items.isNotEmpty && !_hasAutoPlayed) {
+          _hasAutoPlayed = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!audioState.isPlaying || audioState.activeDigestId != digest.id) {
+              final startIdx = digest.currentTrackIndex.clamp(0, digest.items.length - 1);
+              final startPos = Duration(seconds: digest.currentPositionSeconds);
+              controller.loadDailyDigest(
+                digest,
+                startIndex: startIdx,
+                startPosition: startPos,
+                autoPlay: true,
+              );
+            }
+          });
+        }
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(

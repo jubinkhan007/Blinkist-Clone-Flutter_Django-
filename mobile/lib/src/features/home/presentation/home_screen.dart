@@ -16,6 +16,9 @@ import 'widgets/daily_audio_digest_hero.dart';
 import 'widgets/action_plan_card.dart';
 import '../domain/home_models.dart';
 
+import '../../widgets/home_widget_sync_service.dart';
+import '../../media/data/daily_digest_repository.dart';
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -30,6 +33,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(homeWidgetSyncServiceProvider).listenToWidgetClicks(context);
+        ref.read(homeWidgetSyncServiceProvider).syncAll(ref);
+      }
+
       if (!_checkedOnboarding && mounted) {
         _checkedOnboarding = true;
         final repo = ref.read(onboardingRepositoryProvider);
@@ -42,6 +50,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(dailyDigestProvider, (_, next) {
+      if (next.hasValue) {
+        ref.read(homeWidgetSyncServiceProvider).syncDailyDigest(next.value);
+      }
+    });
+
+    ref.listen(readingStatsProvider, (_, next) {
+      if (next.hasValue) {
+        ref.read(homeWidgetSyncServiceProvider).syncAll(ref);
+      }
+    });
+
     final homeFeedAsync = ref.watch(homeFeedProvider);
 
     return Scaffold(

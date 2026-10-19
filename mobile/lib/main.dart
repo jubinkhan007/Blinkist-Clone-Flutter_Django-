@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/core/routing/app_router.dart';
 import 'package:mobile/src/features/reader/presentation/reader_options_provider.dart';
@@ -13,6 +14,10 @@ final audioHandlerProvider = Provider<AppAudioHandler>((ref) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await HomeWidget.setAppGroupId('group.com.blinkist.clone');
+  } catch (_) {}
 
   final audioHandler = await AudioService.init(
     builder: () => AppAudioHandler(),
