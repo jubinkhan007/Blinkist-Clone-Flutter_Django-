@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from django.core.cache import cache
 from django.db import models, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -649,5 +650,247 @@ class ActionPlanExportView(views.APIView):
             'notion_text': notion_text,
             'ics_content': ics_text,
         })
+
+
+class ActivePlaybackSessionView(views.APIView):
+    """
+    GET /api/v1/progress/active-session/
+    Returns the latest cross-platform playback session across all user devices (Web/Mobile).
+    Query parameter: ?current_device_type=web | mobile
+
+    POST /api/v1/progress/active-session/
+    Reports active playback position heartbeat from Web or Mobile.
+    Payload: {
+        "book_id": int or slug,
+        "section_id": int or slug (optional),
+        "position_seconds": float,
+        "duration_seconds": float (optional),
+        "device_type": "web" | "mobile",
+        "device_name": str,
+        "is_playing": bool,
+        "is_finished": bool (optional)
+    }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        current_device_type = request.query_params.get('current_device_type', '')
+
+        cache_key = f"active_playback_session_{user.id}"
+        session = cache.get(cache_key)
+
+        # Fallback to most recent UserAudioProgress from DB if cache expired or absent
+        if not session:
+            latest_audio = UserAudioProgress.objects.filter(
+                user=user,
+                is_finished=False,
+                current_position_seconds__gt=5,
+            ).select_related('book', 'book__author', 'current_section').order_by('-last_listened_at').first()
+
+            if latest_audio:
+                book = latest_audio.book
+                section = latest_audio.current_section
+                pos = latest_audio.current_position_seconds
+                mins = int(pos // 60)
+                secs = int(pos % 60)
+                formatted_pos = f"{mins:02d}:{secs:02d}"
+
+                cover_url = None
+                if book.cover_image:
+                    cover_url = request.build_absolute_uri(book.cover_image.url)
+
+                audio_url = None
+                if section and section.audio_file:
+                    audio_url = request.build_absolute_uri(section.audio_file.url)
+
+                session = {
+                    "book_id": book.id,
+                    "book_slug": book.slug,
+                    "book_title": book.title,
+                    "author_name": book.author.name if book.author else "Author",
+                    "cover_image_url": cover_url,
+                    "section_id": section.id if section else None,
+                    "section_title": section.title if section else "Summary",
+                    "section_order": section.order if section else 1,
+                    "total_sections": book.sections.count(),
+                    "position_seconds": round(pos, 1),
+                    "formatted_position": formatted_pos,
+                    "duration_seconds": section.duration_seconds if section and section.duration_seconds else 600,
+                    "audio_url": audio_url,
+                    "device_type": "mobile",
+                    "device_name": "Mobile App",
+                    "is_playing": False,
+                    "updated_at": latest_audio.last_listened_at.isoformat(),
+                }
+
+        if not session:
+            return response.Response({"has_active_session": False})
+
+        device_type = session.get("device_type", "unknown")
+        device_name = session.get("device_name", "another device")
+        book_title = session.get("book_title", "Book")
+        formatted_pos = session.get("formatted_position", "00:00")
+        is_different_device = bool(current_device_type and current_device_type != device_type)
+
+        prompt_message = f"Resume {book_title} at {formatted_pos} from {device_name}?"
+
+        return response.Response({
+            "has_active_session": True,
+            "can_resume": is_different_device,
+            "prompt_message": prompt_message,
+            **session
+        })
+
+    def post(self, request):
+        user = request.user
+        data = request.data
+
+        book_id = data.get('book_id')
+        book_slug = data.get('book_slug')
+        book = None
+        if book_id:
+            book = Book.objects.filter(id=book_id).first()
+        elif book_slug:
+            book = Book.objects.filter(slug=book_slug).first()
+
+        if not book:
+            return response.Response({'error': 'Book not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        section_id = data.get('section_id')
+        section = None
+        if section_id:
+            section = SummarySection.objects.filter(id=section_id, book=book).first()
+        if not section and book.sections.exists():
+            section = book.sections.order_by('order').first()
+
+        position_seconds = float(data.get('position_seconds', 0.0) or 0.0)
+        duration_seconds = float(data.get('duration_seconds', 0.0) or (section.duration_seconds if section else 600))
+        device_type = data.get('device_type', 'web')
+        device_name = data.get('device_name', 'Web Browser' if device_type == 'web' else 'Mobile Device')
+        is_playing = bool(data.get('is_playing', False))
+        is_finished = bool(data.get('is_finished', False))
+
+        mins = int(position_seconds // 60)
+        secs = int(position_seconds % 60)
+        formatted_pos = f"{mins:02d}:{secs:02d}"
+
+        cover_url = None
+        if book.cover_image:
+            cover_url = request.build_absolute_uri(book.cover_image.url)
+
+        audio_url = None
+        if section and section.audio_file:
+            audio_url = request.build_absolute_uri(section.audio_file.url)
+
+        session_data = {
+            "book_id": book.id,
+            "book_slug": book.slug,
+            "book_title": book.title,
+            "author_name": book.author.name if book.author else "Author",
+            "cover_image_url": cover_url,
+            "section_id": section.id if section else None,
+            "section_title": section.title if section else "Summary",
+            "section_order": section.order if section else 1,
+            "total_sections": book.sections.count(),
+            "position_seconds": round(position_seconds, 1),
+            "formatted_position": formatted_pos,
+            "duration_seconds": duration_seconds,
+            "audio_url": audio_url,
+            "device_type": device_type,
+            "device_name": device_name,
+            "is_playing": is_playing,
+            "updated_at": timezone.now().isoformat(),
+        }
+
+        cache_key = f"active_playback_session_{user.id}"
+        cache.set(cache_key, session_data, timeout=86400 * 7)
+
+        # Persist to UserAudioProgress in DB
+        progress, _ = UserAudioProgress.objects.get_or_create(user=user, book=book)
+        delta_secs = max(0.0, position_seconds - progress.current_position_seconds)
+        audio_mins = int(round(delta_secs / 60.0)) if delta_secs >= 30 else 0
+
+        progress.current_section = section
+        progress.current_position_seconds = position_seconds
+        progress.is_finished = is_finished
+        progress.save()
+
+        if audio_mins > 0:
+            record_activity(user, audio_minutes=audio_mins, books_completed=1 if is_finished else 0)
+
+        return response.Response({
+            "status": "synchronized",
+            "session": session_data,
+        })
+
+
+class PlaybackHandoffView(views.APIView):
+    """
+    POST /api/v1/progress/active-session/handoff/
+    Confirms handoff to the requesting device and returns the exact playback state.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        target_device = request.data.get('device_type', 'web')
+        target_name = request.data.get('device_name', 'Web Browser' if target_device == 'web' else 'Mobile Device')
+
+        cache_key = f"active_playback_session_{user.id}"
+        session = cache.get(cache_key)
+
+        if not session:
+            latest = UserAudioProgress.objects.filter(
+                user=user,
+                is_finished=False,
+            ).select_related('book', 'book__author', 'current_section').order_by('-last_listened_at').first()
+
+            if not latest:
+                return response.Response({'error': 'No active session to hand off'}, status=status.HTTP_404_NOT_FOUND)
+
+            book = latest.book
+            section = latest.current_section
+            pos = latest.current_position_seconds
+            mins = int(pos // 60)
+            secs = int(pos % 60)
+
+            cover_url = None
+            if book.cover_image:
+                cover_url = request.build_absolute_uri(book.cover_image.url)
+
+            audio_url = None
+            if section and section.audio_file:
+                audio_url = request.build_absolute_uri(section.audio_file.url)
+
+            session = {
+                "book_id": book.id,
+                "book_slug": book.slug,
+                "book_title": book.title,
+                "author_name": book.author.name if book.author else "Author",
+                "cover_image_url": cover_url,
+                "section_id": section.id if section else None,
+                "section_title": section.title if section else "Summary",
+                "section_order": section.order if section else 1,
+                "total_sections": book.sections.count(),
+                "position_seconds": round(pos, 1),
+                "formatted_position": f"{mins:02d}:{secs:02d}",
+                "duration_seconds": section.duration_seconds if section and section.duration_seconds else 600,
+                "audio_url": audio_url,
+            }
+
+        prev_device = session.get('device_name', 'previous device')
+        session['device_type'] = target_device
+        session['device_name'] = target_name
+        session['is_playing'] = True
+        session['updated_at'] = timezone.now().isoformat()
+        cache.set(cache_key, session, timeout=86400 * 7)
+
+        return response.Response({
+            "status": "handed_off",
+            "message": f"Playback handed off from {prev_device} to {target_name}",
+            "session": session,
+        })
+
 
 

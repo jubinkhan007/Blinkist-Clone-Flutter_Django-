@@ -353,6 +353,17 @@ class AudioController extends StateNotifier<AudioState> {
         positionSeconds: state.currentPosition.inSeconds.toDouble(),
         isFinished: isFinished,
       );
+      await _progressRepository.updateActivePlaybackSession(
+        bookId: state.bookId!,
+        bookSlug: state.bookSlug,
+        sectionId: currentSection!.id,
+        positionSeconds: state.currentPosition.inSeconds.toDouble(),
+        durationSeconds: state.duration?.inSeconds.toDouble(),
+        deviceType: 'mobile',
+        deviceName: 'Mobile App',
+        isPlaying: state.isPlaying,
+        isFinished: isFinished,
+      );
     } catch (e) {
       debugPrint('Failed to save audio progress: $e');
     }

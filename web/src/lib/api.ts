@@ -1,4 +1,4 @@
-import { Book, Category, DailyBlink, User } from "@/types";
+import { Book, Category, DailyBlink, User, ActivePlaybackSession, UserHighlight } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -331,6 +331,188 @@ class ApiClient {
         return data.is_saved;
       }
     } catch (_) {}
+    return true;
+  }
+
+  // Cross-Platform Playback Sync
+  async getActivePlaybackSession(currentDeviceType = "web"): Promise<ActivePlaybackSession> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/progress/active-session/?current_device_type=${currentDeviceType}`, {
+        headers: this.getHeaders(),
+        cache: "no-store",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+    // Simulated fallback active session from mobile for demo testing
+    return {
+      has_active_session: true,
+      can_resume: true,
+      prompt_message: "Resume Atomic Habits at 04:15 from Mobile App?",
+      book_id: 1,
+      book_slug: "atomic-habits",
+      book_title: "Atomic Habits",
+      author_name: "James Clear",
+      cover_image_url: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80",
+      section_id: 102,
+      section_title: "How Habits Shape Your Identity",
+      section_order: 2,
+      total_sections: 3,
+      position_seconds: 255,
+      formatted_position: "04:15",
+      duration_seconds: 600,
+      audio_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      device_type: "mobile",
+      device_name: "iPhone 15",
+      is_playing: false,
+    };
+  }
+
+  async updateActivePlaybackSession(data: {
+    book_id: number;
+    book_slug?: string;
+    section_id?: number | null;
+    position_seconds: number;
+    duration_seconds?: number;
+    device_type?: string;
+    device_name?: string;
+    is_playing?: boolean;
+    is_finished?: boolean;
+  }): Promise<void> {
+    try {
+      await fetch(`${API_BASE_URL}/progress/active-session/`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          device_type: "web",
+          device_name: "Desktop Web",
+          ...data,
+        }),
+      });
+    } catch (_) {}
+  }
+
+  async handoffPlaybackSession(targetDeviceType = "web", targetDeviceName = "Desktop Web"): Promise<ActivePlaybackSession> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/progress/active-session/handoff/`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          device_type: targetDeviceType,
+          device_name: targetDeviceName,
+        }),
+      });
+      if (res.ok) {
+        const payload = await res.json();
+        return payload.session;
+      }
+    } catch (_) {}
+    return {
+      has_active_session: true,
+      book_id: 1,
+      book_slug: "atomic-habits",
+      book_title: "Atomic Habits",
+      author_name: "James Clear",
+      section_id: 102,
+      section_title: "How Habits Shape Your Identity",
+      section_order: 2,
+      total_sections: 3,
+      position_seconds: 255,
+      formatted_position: "04:15",
+      duration_seconds: 600,
+      audio_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      device_type: "web",
+      device_name: targetDeviceName,
+    };
+  }
+
+  // Live Margin Notes & Highlights
+  async getHighlights(bookSlug?: string): Promise<UserHighlight[]> {
+    try {
+      let url = `${API_BASE_URL}/highlights/`;
+      if (bookSlug) url += `?book_slug=${encodeURIComponent(bookSlug)}`;
+      const res = await fetch(url, { headers: this.getHeaders(), cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : data.results || [];
+      }
+    } catch (_) {}
+    // Local storage fallback for highlights
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`highlights_${bookSlug || "all"}`);
+        if (stored) return JSON.parse(stored);
+      } catch (_) {}
+    }
+    return [
+      {
+        id: 1,
+        book_id: 1,
+        book_slug: "atomic-habits",
+        section_id: 101,
+        section_title: "The Surprising Power of Atomic Habits",
+        selected_text: "A slight 1% improvement every day means you will be 37 times better by the end of one single year.",
+        note: "Crucial mental model for habit compounding",
+        color: "yellow",
+        created_at: "2026-10-27T10:00:00Z",
+      },
+    ];
+  }
+
+  async createHighlight(data: {
+    book_id: number;
+    book_slug?: string;
+    section_id?: number | null;
+    selected_text: string;
+    note?: string;
+    color?: string;
+  }): Promise<UserHighlight> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/highlights/`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+    const newHighlight: UserHighlight = {
+      id: Date.now(),
+      book_id: data.book_id,
+      book_slug: data.book_slug,
+      section_id: data.section_id,
+      selected_text: data.selected_text,
+      note: data.note || "",
+      color: (data.color as "yellow" | "green" | "blue" | "pink") || "yellow",
+      created_at: new Date().toISOString(),
+    };
+    if (typeof window !== "undefined") {
+      try {
+        const key = `highlights_${data.book_slug || "all"}`;
+        const existing = JSON.parse(localStorage.getItem(key) || "[]");
+        localStorage.setItem(key, JSON.stringify([newHighlight, ...existing]));
+      } catch (_) {}
+    }
+    return newHighlight;
+  }
+
+  async deleteHighlight(highlightId: number, bookSlug?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/highlights/${highlightId}/`, {
+        method: "DELETE",
+        headers: this.getHeaders(),
+      });
+      if (res.ok) return true;
+    } catch (_) {}
+    if (typeof window !== "undefined") {
+      try {
+        const key = `highlights_${bookSlug || "all"}`;
+        const existing: UserHighlight[] = JSON.parse(localStorage.getItem(key) || "[]");
+        localStorage.setItem(key, JSON.stringify(existing.filter(h => h.id !== highlightId)));
+      } catch (_) {}
+    }
     return true;
   }
 }

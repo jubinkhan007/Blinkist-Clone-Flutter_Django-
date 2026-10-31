@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, use, Suspense } from "react";
+import React, { useEffect, useState, use, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,16 +11,20 @@ import {
   List,
   CheckCircle,
   X,
-  Type,
   BookOpen,
+  Highlighter,
+  Trash2,
+  Plus,
+  MessageSquare,
 } from "lucide-react";
-import { Book, SummarySection } from "@/types";
+import { Book, SummarySection, UserHighlight } from "@/types";
 import { api } from "@/lib/api";
 import { useAudio } from "@/context/AudioContext";
 
 type ReaderTheme = "light" | "sepia" | "dark";
 type ReaderFont = "serif" | "sans";
 type ReaderSize = "sm" | "md" | "lg" | "xl";
+type HighlightColor = "yellow" | "green" | "blue" | "pink";
 
 function ReaderContent({
   params,
@@ -41,13 +45,34 @@ function ReaderContent({
   const [showSettings, setShowSettings] = useState(false);
   const [showToc, setShowToc] = useState(false);
 
+  // Live Margin Notes & Highlights
+  const [highlights, setHighlights] = useState<UserHighlight[]>([]);
+  const [showNotesDrawer, setShowNotesDrawer] = useState(false);
+  const [selectionToolbar, setSelectionToolbar] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectedColor, setSelectedColor] = useState<HighlightColor>("yellow");
+  const [newNote, setNewNote] = useState("");
+  const [showNoteInput, setShowNoteInput] = useState(false);
+
+  const readingAreaRef = useRef<HTMLDivElement>(null);
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudio();
+
+  const fetchHighlights = useCallback(async () => {
+    try {
+      const data = await api.getHighlights(slug);
+      setHighlights(data);
+    } catch (_) {}
+  }, [slug]);
 
   useEffect(() => {
     async function fetchBook() {
       try {
         const data = await api.getBookBySlug(slug);
         setBook(data);
+        await fetchHighlights();
       } catch (e) {
         console.error("Failed to load book in reader", e);
       } finally {
@@ -55,7 +80,60 @@ function ReaderContent({
       }
     }
     fetchBook();
-  }, [slug]);
+
+    const handleFocus = () => fetchHighlights();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [slug, fetchHighlights]);
+
+  // Handle Text Selection for Highlighting
+  const handleMouseUp = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      setSelectionToolbar(null);
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (text.length < 4) {
+      setSelectionToolbar(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+
+    setSelectionToolbar({
+      text,
+      x: Math.max(10, rect.left + rect.width / 2 - 120),
+      y: Math.max(10, rect.top - 55),
+    });
+  };
+
+  const handleSaveHighlight = async () => {
+    if (!selectionToolbar || !book) return;
+
+    const currentSec = book.sections?.[currentSectionIndex];
+    const created = await api.createHighlight({
+      book_id: book.id,
+      book_slug: book.slug,
+      section_id: currentSec?.id,
+      selected_text: selectionToolbar.text,
+      color: selectedColor,
+      note: newNote.trim(),
+    });
+
+    setHighlights((prev) => [created, ...prev]);
+    setSelectionToolbar(null);
+    setNewNote("");
+    setShowNoteInput(false);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleDeleteHighlight = async (id: number) => {
+    await api.deleteHighlight(id, slug);
+    setHighlights((prev) => prev.filter((h) => h.id !== id));
+  };
 
   if (loading) {
     return (
@@ -102,7 +180,10 @@ function ReaderContent({
     isPlaying;
 
   const handlePlayCurrentAudio = () => {
-    if (currentTrack?.bookSlug === book.slug && currentTrack?.sectionIndex === currentSectionIndex) {
+    if (
+      currentTrack?.bookSlug === book.slug &&
+      currentTrack?.sectionIndex === currentSectionIndex
+    ) {
       togglePlay();
       return;
     }
@@ -116,7 +197,9 @@ function ReaderContent({
       sectionTitle: currentSection.title,
       sectionIndex: currentSectionIndex,
       totalSections,
-      audioUrl: currentSection.audio_url || "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      audioUrl:
+        currentSection.audio_url ||
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
       durationSeconds: currentSection.duration_seconds || 600,
     });
   };
@@ -147,6 +230,20 @@ function ReaderContent({
     }
   };
 
+  const getColorBgClass = (color: HighlightColor) => {
+    switch (color) {
+      case "green":
+        return "bg-emerald-200/60 dark:bg-emerald-900/40 text-emerald-950 dark:text-emerald-100";
+      case "blue":
+        return "bg-sky-200/60 dark:bg-sky-900/40 text-sky-950 dark:text-sky-100";
+      case "pink":
+        return "bg-pink-200/60 dark:bg-pink-900/40 text-pink-950 dark:text-pink-100";
+      case "yellow":
+      default:
+        return "bg-amber-200/60 dark:bg-amber-900/40 text-amber-950 dark:text-amber-100";
+    }
+  };
+
   return (
     <div className={`min-h-screen transition-colors duration-300 ${getThemeClass()}`}>
       {/* Top Reading Progress Bar */}
@@ -169,7 +266,7 @@ function ReaderContent({
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="min-w-0">
-            <h2 className="text-xs font-semibold uppercase tracking-wider opacity-70 truncate max-w-[200px] sm:max-w-sm">
+            <h2 className="text-xs font-semibold uppercase tracking-wider opacity-70 truncate max-w-[180px] sm:max-w-sm">
               {book.title}
             </h2>
             <p className="text-xs font-medium opacity-90 truncate">
@@ -178,9 +275,9 @@ function ReaderContent({
           </div>
         </div>
 
-        {/* Action Controls: Audio, TOC, Typography Settings */}
+        {/* Action Controls: Audio, Notes, TOC, Typography Settings */}
         <div className="flex items-center gap-2">
-          {/* Quick Audio Play for Current Blink */}
+          {/* Audio Play */}
           <button
             onClick={handlePlayCurrentAudio}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-xs transition-colors"
@@ -190,6 +287,17 @@ function ReaderContent({
             <span className="hidden sm:inline">
               {isCurrentBlinkAudioPlaying ? "Pause" : "Listen"}
             </span>
+          </button>
+
+          {/* Notes & Highlights Drawer Toggle */}
+          <button
+            onClick={() => setShowNotesDrawer(!showNotesDrawer)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full hover:bg-black/5 text-xs font-medium transition-colors relative"
+            title="Margin Notes & Quotes"
+            aria-label="Margin notes and highlights"
+          >
+            <Highlighter className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-bold">{highlights.length}</span>
           </button>
 
           {/* Table of Contents Drawer Toggle */}
@@ -213,6 +321,130 @@ function ReaderContent({
           </button>
         </div>
       </header>
+
+      {/* Floating Selection Tooltip for Highlighting */}
+      {selectionToolbar && (
+        <div
+          className="fixed z-50 bg-gray-900 text-white rounded-2xl shadow-2xl p-2 flex flex-col gap-2 border border-gray-700 animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: `${selectionToolbar.y}px`, left: `${selectionToolbar.x}px` }}
+        >
+          <div className="flex items-center gap-1.5">
+            {/* Color buttons */}
+            {(["yellow", "green", "blue", "pink"] as HighlightColor[]).map((c) => (
+              <button
+                key={c}
+                onClick={() => setSelectedColor(c)}
+                className={`w-6 h-6 rounded-full transition-transform ${
+                  selectedColor === c ? "scale-125 ring-2 ring-white" : "opacity-80 hover:opacity-100"
+                } ${
+                  c === "yellow"
+                    ? "bg-amber-400"
+                    : c === "green"
+                    ? "bg-emerald-400"
+                    : c === "blue"
+                    ? "bg-sky-400"
+                    : "bg-pink-400"
+                }`}
+                title={`Highlight in ${c}`}
+              />
+            ))}
+
+            <div className="h-4 w-px bg-gray-700 mx-1" />
+
+            <button
+              onClick={() => setShowNoteInput(!showNoteInput)}
+              className="p-1 rounded-md hover:bg-gray-800 text-gray-300 hover:text-white"
+              title="Add margin note"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={handleSaveHighlight}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs"
+            >
+              Save
+            </button>
+          </div>
+
+          {showNoteInput && (
+            <input
+              type="text"
+              placeholder="Add your margin thought..."
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              className="px-2 py-1 text-xs rounded-lg bg-gray-800 border border-gray-700 text-white outline-hidden placeholder:text-gray-400"
+              autoFocus
+            />
+          )}
+        </div>
+      )}
+
+      {/* Margin Notes & Highlights Drawer */}
+      {showNotesDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            onClick={() => setShowNotesDrawer(false)}
+          />
+          <div className="relative w-88 max-w-full bg-white dark:bg-gray-800 h-full p-6 shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-right duration-300">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-700 mb-4">
+                <div className="flex items-center gap-2">
+                  <Highlighter className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-bold text-base text-gray-900 dark:text-white">
+                    Notes & Highlights ({highlights.length})
+                  </h3>
+                </div>
+                <button onClick={() => setShowNotesDrawer(false)}>
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+
+              {highlights.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 space-y-2">
+                  <Highlighter className="w-8 h-8 mx-auto opacity-50" />
+                  <p className="text-xs">Select any text in the reader to highlight quotes or write margin notes.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 overflow-y-auto max-h-[75vh] pr-1">
+                  {highlights.map((h) => (
+                    <div
+                      key={h.id}
+                      className={`p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700/60 relative group ${getColorBgClass(
+                        h.color
+                      )}`}
+                    >
+                      <button
+                        onClick={() => handleDeleteHighlight(h.id)}
+                        className="absolute top-2.5 right-2.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/10 transition-opacity"
+                        title="Delete highlight"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      </button>
+
+                      <p className="text-xs font-medium italic line-clamp-3">
+                        &ldquo;{h.selected_text}&rdquo;
+                      </p>
+
+                      {h.note && (
+                        <div className="mt-2 pt-2 border-t border-black/10 flex items-start gap-1.5 text-xs font-semibold">
+                          <MessageSquare className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          <span>{h.note}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 flex items-center justify-between">
+              <span>⚡ Live sync across Web & Mobile</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Typography Settings Modal / Dropdown */}
       {showSettings && (
@@ -362,7 +594,11 @@ function ReaderContent({
       )}
 
       {/* Main Reading Canvas */}
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-12 md:py-16">
+      <main
+        ref={readingAreaRef}
+        onMouseUp={handleMouseUp}
+        className="max-w-2xl mx-auto px-4 sm:px-6 py-12 md:py-16 select-text"
+      >
         {/* Blink Title Header */}
         <div className="mb-8 space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -451,4 +687,3 @@ export default function ReaderPage(props: {
     </Suspense>
   );
 }
-

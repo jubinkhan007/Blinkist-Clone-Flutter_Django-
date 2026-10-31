@@ -75,3 +75,40 @@ export interface AudioTrack {
   audioUrl: string;
   durationSeconds: number;
 }
+
+export interface UserHighlight {
+  id: number;
+  book_id: number;
+  book_slug?: string;
+  section_id?: number | null;
+  section_title?: string;
+  selected_text: string;
+  note?: string;
+  color: "yellow" | "green" | "blue" | "pink";
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ActivePlaybackSession {
+  has_active_session: boolean;
+  can_resume?: boolean;
+  prompt_message?: string;
+  book_id?: number;
+  book_slug?: string;
+  book_title?: string;
+  author_name?: string;
+  cover_image_url?: string | null;
+  section_id?: number | null;
+  section_title?: string;
+  section_order?: number;
+  total_sections?: number;
+  position_seconds?: number;
+  formatted_position?: string;
+  duration_seconds?: number;
+  audio_url?: string | null;
+  device_type?: "web" | "mobile" | "unknown";
+  device_name?: string;
+  is_playing?: boolean;
+  updated_at?: string;
+}
+

@@ -391,5 +391,86 @@ class BulkProgressSyncTests(APITestCase):
         self.assertEqual(full.current_page, 25)
 
 
+class ActivePlaybackSessionTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='playback_sync@example.com',
+            username='playback_sync',
+            password='secret123',
+        )
+        self.client.force_authenticate(self.user)
+        author = Author.objects.create(name='Test Author')
+        category = Category.objects.create(name='Productivity', slug='productivity')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            subtitle='Tiny Changes, Remarkable Results',
+            slug='atomic-habits',
+            author=author,
+        )
+        self.book.categories.add(category)
+        from apps.summaries.models import SummarySection
+        self.section = SummarySection.objects.create(
+            book=self.book,
+            title='Fundamentals of Habit Formation',
+            order=1,
+            duration_seconds=360,
+        )
+
+    def test_post_active_session_synchronizes_position(self):
+        url = reverse('active_playback_session')
+        payload = {
+            'book_id': self.book.id,
+            'section_id': self.section.id,
+            'position_seconds': 155.5,
+            'device_type': 'web',
+            'device_name': 'MacBook Chrome',
+            'is_playing': True,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['status'], 'synchronized')
+        self.assertEqual(res.data['session']['formatted_position'], '02:35')
+        self.assertEqual(res.data['session']['device_type'], 'web')
+
+    def test_get_active_session_returns_prompt_for_different_device(self):
+        # First simulate listening on Web
+        self.client.post(reverse('active_playback_session'), {
+            'book_id': self.book.id,
+            'section_id': self.section.id,
+            'position_seconds': 255.0,
+            'device_type': 'web',
+            'device_name': 'Desktop Web',
+            'is_playing': False,
+        }, format='json')
+
+        # Mobile app queries active session
+        res = self.client.get(reverse('active_playback_session') + '?current_device_type=mobile')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['has_active_session'])
+        self.assertTrue(res.data['can_resume'])
+        self.assertIn('Resume Atomic Habits at 04:15 from Desktop Web?', res.data['prompt_message'])
+
+    def test_playback_handoff_switches_active_device(self):
+        # Listen on web
+        self.client.post(reverse('active_playback_session'), {
+            'book_id': self.book.id,
+            'section_id': self.section.id,
+            'position_seconds': 300.0,
+            'device_type': 'web',
+            'device_name': 'Desktop Web',
+        }, format='json')
+
+        # Hand off to mobile
+        res = self.client.post(reverse('playback_handoff'), {
+            'device_type': 'mobile',
+            'device_name': 'iPhone 15',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['status'], 'handed_off')
+        self.assertEqual(res.data['session']['device_type'], 'mobile')
+        self.assertEqual(res.data['session']['device_name'], 'iPhone 15')
+
+
+
 
 

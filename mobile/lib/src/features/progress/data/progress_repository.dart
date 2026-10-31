@@ -79,6 +79,74 @@ class UserFullBookProgress {
   }
 }
 
+class CrossDevicePlaybackSession {
+  final bool hasActiveSession;
+  final bool canResume;
+  final String? promptMessage;
+  final int? bookId;
+  final String? bookSlug;
+  final String? bookTitle;
+  final String? authorName;
+  final String? coverImageUrl;
+  final int? sectionId;
+  final String? sectionTitle;
+  final int sectionOrder;
+  final int totalSections;
+  final double positionSeconds;
+  final String formattedPosition;
+  final double durationSeconds;
+  final String? audioUrl;
+  final String deviceType;
+  final String deviceName;
+  final bool isPlaying;
+
+  const CrossDevicePlaybackSession({
+    required this.hasActiveSession,
+    this.canResume = false,
+    this.promptMessage,
+    this.bookId,
+    this.bookSlug,
+    this.bookTitle,
+    this.authorName,
+    this.coverImageUrl,
+    this.sectionId,
+    this.sectionTitle,
+    this.sectionOrder = 1,
+    this.totalSections = 1,
+    this.positionSeconds = 0.0,
+    this.formattedPosition = '00:00',
+    this.durationSeconds = 600.0,
+    this.audioUrl,
+    this.deviceType = 'unknown',
+    this.deviceName = 'device',
+    this.isPlaying = false,
+  });
+
+  factory CrossDevicePlaybackSession.fromJson(Map<String, dynamic> json) {
+    return CrossDevicePlaybackSession(
+      hasActiveSession: json['has_active_session'] as bool? ?? false,
+      canResume: json['can_resume'] as bool? ?? false,
+      promptMessage: json['prompt_message'] as String?,
+      bookId: json['book_id'] as int?,
+      bookSlug: json['book_slug'] as String?,
+      bookTitle: json['book_title'] as String?,
+      authorName: json['author_name'] as String?,
+      coverImageUrl: json['cover_image_url'] as String?,
+      sectionId: json['section_id'] as int?,
+      sectionTitle: json['section_title'] as String?,
+      sectionOrder: (json['section_order'] as num?)?.toInt() ?? 1,
+      totalSections: (json['total_sections'] as num?)?.toInt() ?? 1,
+      positionSeconds: (json['position_seconds'] as num?)?.toDouble() ?? 0.0,
+      formattedPosition: json['formatted_position'] as String? ?? '00:00',
+      durationSeconds: (json['duration_seconds'] as num?)?.toDouble() ?? 600.0,
+      audioUrl: json['audio_url'] as String?,
+      deviceType: json['device_type'] as String? ?? 'unknown',
+      deviceName: json['device_name'] as String? ?? 'device',
+      isPlaying: json['is_playing'] as bool? ?? false,
+    );
+  }
+}
+
 class ProgressRepository {
   final Dio _dio;
   final LocalCacheDatabase? _cacheDb;
@@ -273,6 +341,75 @@ class ProgressRepository {
       await _dio.post('/progress/activity/');
     } catch (_) {}
   }
+
+  // Cross-Platform Playback Sync
+  Future<CrossDevicePlaybackSession?> getActivePlaybackSession({
+    String currentDeviceType = 'mobile',
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/progress/active-session/',
+        queryParameters: {'current_device_type': currentDeviceType},
+      );
+      if (response.data is Map<String, dynamic>) {
+        return CrossDevicePlaybackSession.fromJson(
+          response.data as Map<String, dynamic>,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> updateActivePlaybackSession({
+    required int bookId,
+    String? bookSlug,
+    int? sectionId,
+    required double positionSeconds,
+    double? durationSeconds,
+    String deviceType = 'mobile',
+    String deviceName = 'Mobile App',
+    bool isPlaying = false,
+    bool isFinished = false,
+  }) async {
+    try {
+      await _dio.post(
+        '/progress/active-session/',
+        data: {
+          'book_id': bookId,
+          if (bookSlug != null) 'book_slug': bookSlug,
+          if (sectionId != null) 'section_id': sectionId,
+          'position_seconds': positionSeconds,
+          if (durationSeconds != null) 'duration_seconds': durationSeconds,
+          'device_type': deviceType,
+          'device_name': deviceName,
+          'is_playing': isPlaying,
+          'is_finished': isFinished,
+        },
+      );
+    } catch (_) {}
+  }
+
+  Future<CrossDevicePlaybackSession?> handoffPlaybackSession({
+    String targetDeviceType = 'mobile',
+    String targetDeviceName = 'Mobile App',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/progress/active-session/handoff/',
+        data: {
+          'device_type': targetDeviceType,
+          'device_name': targetDeviceName,
+        },
+      );
+      if (response.data is Map<String, dynamic> &&
+          response.data['session'] is Map<String, dynamic>) {
+        return CrossDevicePlaybackSession.fromJson(
+          response.data['session'] as Map<String, dynamic>,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
 }
 
 @riverpod
@@ -289,4 +426,10 @@ final readingStatsProvider = FutureProvider<UserReadingStats>((ref) async {
 final badgesProvider = FutureProvider<List<UserBadgeItem>>((ref) async {
   return ref.watch(progressRepositoryProvider).getBadges();
 });
+
+final crossDevicePlaybackSessionProvider =
+    FutureProvider<CrossDevicePlaybackSession?>((ref) async {
+  return ref.watch(progressRepositoryProvider).getActivePlaybackSession();
+});
+
 

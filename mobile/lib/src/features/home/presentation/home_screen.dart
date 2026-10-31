@@ -13,6 +13,7 @@ import '../../progress/domain/reading_stats_models.dart';
 import '../../onboarding/data/onboarding_repository.dart';
 import '../../flashcards/presentation/widgets/daily_recall_card.dart';
 import 'widgets/daily_audio_digest_hero.dart';
+import 'widgets/continue_listening_cross_device_card.dart';
 import 'widgets/action_plan_card.dart';
 import '../domain/home_models.dart';
 
@@ -84,6 +85,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 16),
             children: [
+              const ContinueListeningCrossDeviceCard(),
               const DailyAudioDigestHero(),
               const ActionPlanHomeWidget(),
               if (feed.dailyPick != null)

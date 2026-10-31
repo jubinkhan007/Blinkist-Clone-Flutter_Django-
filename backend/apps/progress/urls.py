@@ -13,9 +13,13 @@ from .views import (
     ActionPlanItemToggleView,
     ActionPlanExportView,
     BulkProgressSyncView,
+    ActivePlaybackSessionView,
+    PlaybackHandoffView,
 )
 
 urlpatterns = [
+    path('active-session/', ActivePlaybackSessionView.as_view(), name='active_playback_session'),
+    path('active-session/handoff/', PlaybackHandoffView.as_view(), name='playback_handoff'),
     path('sync/', BulkProgressSyncView.as_view(), name='progress_sync'),
     path('stats/', UserReadingStatsView.as_view(), name='reading_stats'),
     path('badges/', UserBadgesView.as_view(), name='user_badges'),
