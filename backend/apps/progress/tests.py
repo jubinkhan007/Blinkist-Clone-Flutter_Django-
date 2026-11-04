@@ -139,6 +139,17 @@ class UserReadingStatsTests(APITestCase):
         self.assertGreaterEqual(data['unlocked_badges_count'], 1)
         self.assertIn('recent_badges', data)
 
+        # Test time saved metrics
+        self.assertIn('time_saved_hours', data)
+        self.assertIn('monthly_time_saved_hours', data)
+        self.assertIn('equivalent_full_books', data)
+        self.assertGreaterEqual(data['time_saved_hours'], 0.0)
+
+        # Test custom heatmap days parameter
+        res_custom = self.client.get(reverse('reading_stats') + '?heatmap_days=120')
+        self.assertEqual(res_custom.status_code, 200)
+        self.assertEqual(len(res_custom.data['activity_heatmap']), 120)
+
     def test_user_badges_endpoint(self):
         # Trigger some progress
         self.client.post(
@@ -469,6 +480,65 @@ class ActivePlaybackSessionTests(APITestCase):
         self.assertEqual(res.data['status'], 'handed_off')
         self.assertEqual(res.data['session']['device_type'], 'mobile')
         self.assertEqual(res.data['session']['device_name'], 'iPhone 15')
+
+
+class LearningReportApiTests(APITestCase):
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.catalog.models import Author, Category
+        from apps.progress.models import UserDailyActivity
+        from django.utils import timezone
+
+        self.user = User.objects.create_user(
+            username='learner',
+            email='learner@example.com',
+            password='password123',
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.author = Author.objects.create(name='James Clear')
+        self.category = Category.objects.create(name='Productivity & Time Management', slug='productivity')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            slug='atomic-habits',
+            author=self.author,
+            estimated_read_time_minutes=15,
+        )
+        self.book.categories.add(self.category)
+
+        today = timezone.localdate()
+        UserDailyActivity.objects.create(
+            user=self.user,
+            date=today,
+            reading_minutes=30,
+            audio_minutes=45,
+            sections_read=4,
+            books_completed=1,
+        )
+
+    def test_annual_wrapped_report(self):
+        res = self.client.get(reverse('learning_wrapped') + '?period=annual')
+        self.assertEqual(res.status_code, 200)
+        data = res.data
+
+        self.assertEqual(data['period_type'], 'annual')
+        self.assertIn('Wrapped', data['period_label'])
+        self.assertEqual(data['total_minutes'], 75)
+        self.assertEqual(data['books_completed_count'], 1)
+        self.assertGreater(data['time_saved_hours'], 0)
+        self.assertIn('learner_archetype', data)
+        self.assertTrue(len(data['top_categories']) > 0)
+        self.assertIn('#BlinkistWrapped', data['shareable_text'])
+
+    def test_monthly_learning_report(self):
+        res = self.client.get(reverse('learning_wrapped') + '?period=monthly')
+        self.assertEqual(res.status_code, 200)
+        data = res.data
+
+        self.assertEqual(data['period_type'], 'monthly')
+        self.assertIn('Learning Report', data['period_label'])
+        self.assertGreaterEqual(data['total_minutes'], 75)
+
 
 
 

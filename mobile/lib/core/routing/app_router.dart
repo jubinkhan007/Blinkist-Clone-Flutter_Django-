@@ -16,6 +16,7 @@ import '../../src/features/notifications/presentation/notifications_screen.dart'
 import '../../src/features/onboarding/presentation/onboarding_screen.dart';
 import '../../src/features/catalog/presentation/collection_detail_screen.dart';
 import '../../src/features/progress/presentation/reading_stats_screen.dart';
+import '../../src/features/progress/presentation/learning_report_screen.dart';
 import '../../src/features/flashcards/presentation/flashcard_study_screen.dart';
 import '../../src/features/library/presentation/space_detail_screen.dart';
 import '../../src/features/media/presentation/daily_blink_screen.dart';
@@ -210,6 +211,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/stats',
         builder: (context, state) => const ReadingStatsScreen(),
+      ),
+      GoRoute(
+        path: '/reading-insights/wrapped',
+        builder: (context, state) => const LearningReportScreen(),
       ),
     ],
   );

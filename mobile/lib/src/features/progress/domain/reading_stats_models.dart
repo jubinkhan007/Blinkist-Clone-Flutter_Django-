@@ -122,6 +122,10 @@ class UserReadingStats {
   final int totalAudioMinutes;
   final int totalReadingMinutes;
   final int totalHighlights;
+  final double timeSavedHours;
+  final int timeSavedMinutes;
+  final double monthlyTimeSavedHours;
+  final int equivalentFullBooks;
   final List<bool> weeklyActivity; // Mon to Sun
   final ReadingPeriodStats weekly;
   final ReadingPeriodStats monthly;
@@ -140,6 +144,10 @@ class UserReadingStats {
     required this.totalAudioMinutes,
     required this.totalReadingMinutes,
     required this.totalHighlights,
+    this.timeSavedHours = 0.0,
+    this.timeSavedMinutes = 0,
+    this.monthlyTimeSavedHours = 0.0,
+    this.equivalentFullBooks = 0,
     required this.weeklyActivity,
     required this.weekly,
     required this.monthly,
@@ -167,6 +175,10 @@ class UserReadingStats {
       totalAudioMinutes: (json['total_audio_minutes'] as num?)?.toInt() ?? 0,
       totalReadingMinutes: (json['total_reading_minutes'] as num?)?.toInt() ?? 0,
       totalHighlights: (json['total_highlights'] as num?)?.toInt() ?? 0,
+      timeSavedHours: (json['time_saved_hours'] as num?)?.toDouble() ?? 0.0,
+      timeSavedMinutes: (json['time_saved_minutes'] as num?)?.toInt() ?? 0,
+      monthlyTimeSavedHours: (json['monthly_time_saved_hours'] as num?)?.toDouble() ?? 0.0,
+      equivalentFullBooks: (json['equivalent_full_books'] as num?)?.toInt() ?? 0,
       weeklyActivity: weeklyRaw.map((e) => e == true).toList(),
       weekly: ReadingPeriodStats.fromJson(json['weekly'] as Map<String, dynamic>?),
       monthly: ReadingPeriodStats.fromJson(json['monthly'] as Map<String, dynamic>?),
@@ -193,6 +205,10 @@ class UserReadingStats {
       totalAudioMinutes: 0,
       totalReadingMinutes: 0,
       totalHighlights: 0,
+      timeSavedHours: 0.0,
+      timeSavedMinutes: 0,
+      monthlyTimeSavedHours: 0.0,
+      equivalentFullBooks: 0,
       weeklyActivity: const [false, false, false, false, false, false, false],
       weekly: ReadingPeriodStats.empty(),
       monthly: ReadingPeriodStats.empty(),
@@ -203,3 +219,149 @@ class UserReadingStats {
     );
   }
 }
+
+class LearningReportCategory {
+  final String name;
+  final int count;
+  final int percentage;
+  final String color;
+  final String icon;
+
+  const LearningReportCategory({
+    required this.name,
+    required this.count,
+    required this.percentage,
+    required this.color,
+    required this.icon,
+  });
+
+  factory LearningReportCategory.fromJson(Map<String, dynamic> json) {
+    return LearningReportCategory(
+      name: json['name'] as String? ?? 'General',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      percentage: (json['percentage'] as num?)?.toInt() ?? 0,
+      color: json['color'] as String? ?? '#10B981',
+      icon: json['icon'] as String? ?? 'zap',
+    );
+  }
+}
+
+class LearningReportTopBook {
+  final int id;
+  final String? slug;
+  final String title;
+  final String author;
+  final String? coverImageUrl;
+  final int sectionsCompleted;
+
+  const LearningReportTopBook({
+    required this.id,
+    this.slug,
+    required this.title,
+    required this.author,
+    this.coverImageUrl,
+    required this.sectionsCompleted,
+  });
+
+  factory LearningReportTopBook.fromJson(Map<String, dynamic> json) {
+    return LearningReportTopBook(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      slug: json['slug'] as String?,
+      title: json['title'] as String? ?? 'Unknown Title',
+      author: json['author'] as String? ?? 'Unknown Author',
+      coverImageUrl: json['cover_image_url'] as String?,
+      sectionsCompleted: (json['sections_completed'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class LearningReport {
+  final String periodType;
+  final String periodLabel;
+  final int year;
+  final int totalMinutes;
+  final double totalHours;
+  final int readingMinutes;
+  final int audioMinutes;
+  final int audioPercentage;
+  final int readingPercentage;
+  final int booksCompletedCount;
+  final int sectionsCompletedCount;
+  final double timeSavedHours;
+  final double timeSavedDays;
+  final List<LearningReportCategory> topCategories;
+  final String learnerArchetype;
+  final String learnerArchetypeDescription;
+  final int completedActionPlans;
+  final int habitsFormed;
+  final int keyIdeasRetained;
+  final int activeDaysCount;
+  final int currentStreak;
+  final int longestStreak;
+  final LearningReportTopBook? topBook;
+  final String shareableText;
+
+  const LearningReport({
+    required this.periodType,
+    required this.periodLabel,
+    required this.year,
+    required this.totalMinutes,
+    required this.totalHours,
+    required this.readingMinutes,
+    required this.audioMinutes,
+    required this.audioPercentage,
+    required this.readingPercentage,
+    required this.booksCompletedCount,
+    required this.sectionsCompletedCount,
+    required this.timeSavedHours,
+    required this.timeSavedDays,
+    required this.topCategories,
+    required this.learnerArchetype,
+    required this.learnerArchetypeDescription,
+    required this.completedActionPlans,
+    required this.habitsFormed,
+    required this.keyIdeasRetained,
+    required this.activeDaysCount,
+    required this.currentStreak,
+    required this.longestStreak,
+    this.topBook,
+    required this.shareableText,
+  });
+
+  factory LearningReport.fromJson(Map<String, dynamic> json) {
+    final catsRaw = json['top_categories'] as List<dynamic>? ?? [];
+    final topBookRaw = json['top_book'] as Map<String, dynamic>?;
+
+    return LearningReport(
+      periodType: json['period_type'] as String? ?? 'annual',
+      periodLabel: json['period_label'] as String? ?? 'Blinkist Wrapped',
+      year: (json['year'] as num?)?.toInt() ?? DateTime.now().year,
+      totalMinutes: (json['total_minutes'] as num?)?.toInt() ?? 0,
+      totalHours: (json['total_hours'] as num?)?.toDouble() ?? 0.0,
+      readingMinutes: (json['reading_minutes'] as num?)?.toInt() ?? 0,
+      audioMinutes: (json['audio_minutes'] as num?)?.toInt() ?? 0,
+      audioPercentage: (json['audio_percentage'] as num?)?.toInt() ?? 50,
+      readingPercentage: (json['reading_percentage'] as num?)?.toInt() ?? 50,
+      booksCompletedCount: (json['books_completed_count'] as num?)?.toInt() ?? 0,
+      sectionsCompletedCount: (json['sections_completed_count'] as num?)?.toInt() ?? 0,
+      timeSavedHours: (json['time_saved_hours'] as num?)?.toDouble() ?? 0.0,
+      timeSavedDays: (json['time_saved_days'] as num?)?.toDouble() ?? 0.0,
+      topCategories: catsRaw
+          .whereType<Map<String, dynamic>>()
+          .map((c) => LearningReportCategory.fromJson(c))
+          .toList(),
+      learnerArchetype: json['learner_archetype'] as String? ?? 'The Lifelong Polymath',
+      learnerArchetypeDescription: json['learner_archetype_description'] as String? ??
+          'Your curiosity spans diverse domains, synthesizing unique cross-functional ideas.',
+      completedActionPlans: (json['completed_action_plans'] as num?)?.toInt() ?? 0,
+      habitsFormed: (json['habits_formed'] as num?)?.toInt() ?? 0,
+      keyIdeasRetained: (json['key_ideas_retained'] as num?)?.toInt() ?? 0,
+      activeDaysCount: (json['active_days_count'] as num?)?.toInt() ?? 0,
+      currentStreak: (json['current_streak'] as num?)?.toInt() ?? 0,
+      longestStreak: (json['longest_streak'] as num?)?.toInt() ?? 0,
+      topBook: topBookRaw != null ? LearningReportTopBook.fromJson(topBookRaw) : null,
+      shareableText: json['shareable_text'] as String? ?? '',
+    );
+  }
+}
+

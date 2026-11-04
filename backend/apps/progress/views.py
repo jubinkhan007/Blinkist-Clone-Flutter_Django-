@@ -406,8 +406,29 @@ class UserReadingStatsView(views.APIView):
             'books_completed': month_agg['books_c'] or 0,
         }
 
-        # 84-Day Activity Heatmap (12 full weeks ending today)
-        heatmap_start = today - timedelta(days=83)
+        # Time saved calculation
+        # Average non-fiction book: 360 mins (6h). Average Blinkist summary: 15 mins.
+        # Time saved per completed book: ~345 mins (5.75h).
+        # Time saved per extra section read: ~40 mins.
+        time_saved_mins = (total_books_completed * 345) + max(0, (total_sections_read - total_books_completed * 8) * 40)
+        if time_saved_mins == 0 and (total_reading_minutes + total_audio_minutes) > 0:
+            time_saved_mins = (total_reading_minutes + total_audio_minutes) * 4
+        time_saved_hours = round(time_saved_mins / 60.0, 1)
+
+        monthly_books_c = monthly_stats.get('books_completed', 0)
+        monthly_time_spent = monthly_stats.get('total_minutes', 0)
+        monthly_saved_mins = (monthly_books_c * 345) + (monthly_time_spent * 3)
+        monthly_time_saved_hours = round(monthly_saved_mins / 60.0, 1)
+        equivalent_full_books = max(total_books_completed, int(round((total_reading_minutes + total_audio_minutes) / 15.0)))
+
+        # Activity Heatmap (Configurable: default 84 days = 12 weeks; supports up to 365 days for annual view)
+        days_param = request.query_params.get('heatmap_days')
+        try:
+            num_days = min(365, max(14, int(days_param))) if days_param else 84
+        except (ValueError, TypeError):
+            num_days = 84
+
+        heatmap_start = today - timedelta(days=num_days - 1)
         history_map = {
             act.date: act for act in UserDailyActivity.objects.filter(
                 user=user,
@@ -417,7 +438,7 @@ class UserReadingStatsView(views.APIView):
         }
 
         activity_heatmap = []
-        for offset in range(84):
+        for offset in range(num_days):
             day_date = heatmap_start + timedelta(days=offset)
             act = history_map.get(day_date)
             r_m = act.reading_minutes if act else 0
@@ -427,13 +448,15 @@ class UserReadingStatsView(views.APIView):
             is_act = tot_m > 0 or (act is not None) or (user.last_active_date == day_date)
 
             intensity = 0
-            if is_act:
+            if is_act or tot_m > 0:
                 if tot_m <= 10:
                     intensity = 1
                 elif tot_m <= 25:
                     intensity = 2
-                else:
+                elif tot_m <= 45:
                     intensity = 3
+                else:
+                    intensity = 4
 
             activity_heatmap.append({
                 'date': day_date.isoformat(),
@@ -460,6 +483,10 @@ class UserReadingStatsView(views.APIView):
             'total_audio_minutes': total_audio_minutes,
             'total_reading_minutes': total_reading_minutes,
             'total_highlights': total_highlights,
+            'time_saved_hours': time_saved_hours,
+            'time_saved_minutes': time_saved_mins,
+            'monthly_time_saved_hours': monthly_time_saved_hours,
+            'equivalent_full_books': equivalent_full_books,
             'weekly_activity': weekly_activity,
             'weekly': weekly_stats,
             'monthly': monthly_stats,
@@ -481,6 +508,241 @@ class UserBadgesView(views.APIView):
             'total_badges': len(badges),
             'unlocked_count': unlocked_count,
             'badges': badges,
+        })
+
+
+class UserLearningReportView(views.APIView):
+    """
+    GET /api/v1/progress/analytics/wrapped/?period=annual&year=2026
+    Generates a personalized "Blinkist Wrapped" and Annual/Monthly Learning Report.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from datetime import date
+        import calendar
+        from apps.catalog.models import Category
+        from apps.summaries.models import UserHighlight
+
+        user = request.user
+        today = timezone.localdate()
+        period_type = request.query_params.get('period', 'annual')  # 'annual' or 'monthly'
+
+        try:
+            year = int(request.query_params.get('year', today.year))
+        except (ValueError, TypeError):
+            year = today.year
+
+        if period_type == 'monthly':
+            try:
+                month = int(request.query_params.get('month', today.month))
+            except (ValueError, TypeError):
+                month = today.month
+            start_date = date(year, month, 1)
+            _, last_day = calendar.monthrange(year, month)
+            end_date = min(today, date(year, month, last_day))
+            period_label = f"{start_date.strftime('%B %Y')} Learning Report"
+        else:
+            start_date = date(year, 1, 1)
+            end_date = min(today, date(year, 12, 31))
+            period_label = f"{year} Blinkist Wrapped"
+
+        activities = UserDailyActivity.objects.filter(
+            user=user,
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+        agg = activities.aggregate(
+            read_m=models.Sum('reading_minutes'),
+            aud_m=models.Sum('audio_minutes'),
+            sec_r=models.Sum('sections_read'),
+            books_c=models.Sum('books_completed'),
+        )
+        reading_minutes = agg['read_m'] or 0
+        audio_minutes = agg['aud_m'] or 0
+        sections_read = agg['sec_r'] or 0
+        books_completed = agg['books_c'] or 0
+
+        # Account for books marked completed in period
+        completed_in_period = UserBookProgress.objects.filter(
+            user=user,
+            is_completed=True,
+            last_read_at__date__gte=start_date,
+            last_read_at__date__lte=end_date,
+        ).count()
+        books_completed = max(books_completed, completed_in_period)
+
+        total_minutes = reading_minutes + audio_minutes
+        total_hours = round(total_minutes / 60.0, 1)
+
+        # Audio vs reading ratio
+        if total_minutes > 0:
+            audio_pct = int(round((audio_minutes / total_minutes) * 100))
+            reading_pct = 100 - audio_pct
+        else:
+            audio_pct = 60
+            reading_pct = 40
+
+        # Time saved metric: full book ~360 mins vs 15 min summary
+        time_saved_mins = (books_completed * 345) + max(0, (sections_read - books_completed * 8) * 40)
+        if time_saved_mins == 0 and total_minutes > 0:
+            time_saved_mins = total_minutes * 4
+        time_saved_hours = round(time_saved_mins / 60.0, 1)
+        time_saved_days = round(time_saved_hours / 24.0, 1)
+
+        # Top Categories
+        book_ids = set(UserSummaryProgress.objects.filter(
+            user=user,
+            last_read_at__date__gte=start_date,
+            last_read_at__date__lte=end_date,
+        ).values_list('book_id', flat=True))
+        book_ids.update(UserAudioProgress.objects.filter(
+            user=user,
+            last_listened_at__date__gte=start_date,
+            last_listened_at__date__lte=end_date,
+        ).values_list('book_id', flat=True))
+
+        category_counts = {}
+        if book_ids:
+            for cat in Category.objects.filter(books__id__in=book_ids).annotate(c=models.Count('books')):
+                category_counts[cat.name] = category_counts.get(cat.name, 0) + cat.c
+
+        # Default fallback categories if new user
+        if not category_counts:
+            category_counts = {
+                'Productivity & Time Management': 4,
+                'Psychology & Mindset': 3,
+                'Career & Success': 2,
+                'Personal Finance': 1,
+            }
+
+        top_categories = []
+        tot_cat_events = sum(category_counts.values()) or 1
+        sorted_cats = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:4]
+        colors = ['#10B981', '#6366F1', '#F59E0B', '#EC4899']
+        icons = ['zap', 'brain', 'briefcase', 'compass']
+        for idx, (cat_name, count) in enumerate(sorted_cats):
+            pct = int(round((count / tot_cat_events) * 100))
+            top_categories.append({
+                'name': cat_name,
+                'count': count,
+                'percentage': pct,
+                'color': colors[idx % len(colors)],
+                'icon': icons[idx % len(icons)],
+            })
+
+        # Learner archetype derivation
+        primary_cat = sorted_cats[0][0] if sorted_cats else 'Productivity'
+        if 'Productivity' in primary_cat or 'Habit' in primary_cat:
+            archetype = "The Hyper-Productive Strategist"
+            description = "You focus on compounding small daily gains and optimizing systems to maximize output and focus."
+        elif 'Psychology' in primary_cat or 'Mind' in primary_cat:
+            archetype = "The Mindset & Behavior Explorer"
+            description = "You seek deep understanding of cognitive models, behavioral psychology, and human decision-making."
+        elif 'Career' in primary_cat or 'Business' in primary_cat or 'Leadership' in primary_cat:
+            archetype = "The High-Impact Leader"
+            description = "You translate strategic thinking into scalable leadership, high leverage, and breakthrough execution."
+        elif 'Finance' in primary_cat or 'Money' in primary_cat:
+            archetype = "The Wealth & Freedom Architect"
+            description = "You master the mechanics of financial independence, asymmetrical upside, and long-term leverage."
+        else:
+            archetype = "The Lifelong Polymath"
+            description = "Your curiosity spans diverse multidisciplinary domains, synthesizing unique cross-functional ideas."
+
+        # Action Plans & Micro-Habits
+        completed_plans = ActionPlan.objects.filter(
+            user=user,
+            is_active=True,
+            completed_at__date__gte=start_date,
+            completed_at__date__lte=end_date,
+        ).count()
+        habits_formed = ActionPlanItem.objects.filter(
+            plan__user=user,
+            is_completed=True,
+            completed_at__date__gte=start_date,
+            completed_at__date__lte=end_date,
+        ).count()
+
+        # Highlights count
+        highlights_count = UserHighlight.objects.filter(
+            user=user,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        ).count()
+
+        # Top Book
+        top_book_prog = UserSummaryProgress.objects.filter(
+            user=user,
+            last_read_at__date__gte=start_date,
+            last_read_at__date__lte=end_date,
+        ).select_related('book', 'book__author').order_by('-completed_sections_count').first()
+        top_book = None
+        if top_book_prog and top_book_prog.book:
+            b = top_book_prog.book
+            top_book = {
+                'id': b.id,
+                'slug': b.slug,
+                'title': b.title,
+                'author': b.author.name if b.author else 'Author',
+                'cover_image_url': b.cover_image.url if getattr(b, 'cover_image', None) else None,
+                'sections_completed': top_book_prog.completed_sections_count,
+            }
+        else:
+            # Fallback to featured book
+            fb = Book.objects.first()
+            if fb:
+                top_book = {
+                    'id': fb.id,
+                    'slug': fb.slug,
+                    'title': fb.title,
+                    'author': fb.author.name if fb.author else 'Author',
+                    'cover_image_url': fb.cover_image.url if getattr(fb, 'cover_image', None) else None,
+                    'sections_completed': 8,
+                }
+
+        # Days active
+        active_days = activities.filter(
+            models.Q(reading_minutes__gt=0) | models.Q(audio_minutes__gt=0)
+        ).count()
+        if user.last_active_date and start_date <= user.last_active_date <= end_date:
+            active_days = max(1, active_days)
+
+        # Shareable text snippet
+        shareable_text = (
+            f"🎉 My {year} Blinkist Wrapped!\n\n"
+            f"🧠 Archetype: {archetype}\n"
+            f"⚡ Time Saved: {time_saved_hours} hours\n"
+            f"📚 Books Explored: {books_completed} completed ({total_hours}h learning)\n"
+            f"🎯 Core Domain: {primary_cat}\n"
+            f"🔥 Longest Streak: {user.longest_streak} days\n\n"
+            f"#Blinkist #LifelongLearning #BlinkistWrapped"
+        )
+
+        return response.Response({
+            'period_type': period_type,
+            'period_label': period_label,
+            'year': year,
+            'total_minutes': total_minutes,
+            'total_hours': total_hours,
+            'reading_minutes': reading_minutes,
+            'audio_minutes': audio_minutes,
+            'audio_percentage': audio_pct,
+            'reading_percentage': reading_pct,
+            'books_completed_count': books_completed,
+            'sections_completed_count': sections_read,
+            'time_saved_hours': time_saved_hours,
+            'time_saved_days': time_saved_days,
+            'top_categories': top_categories,
+            'learner_archetype': archetype,
+            'learner_archetype_description': description,
+            'completed_action_plans': completed_plans,
+            'habits_formed': habits_formed,
+            'key_ideas_retained': highlights_count,
+            'active_days_count': active_days,
+            'current_streak': user.get_current_streak(today=today),
+            'longest_streak': user.longest_streak,
+            'top_book': top_book,
+            'shareable_text': shareable_text,
         })
 
 

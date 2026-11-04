@@ -410,6 +410,55 @@ class ProgressRepository {
     } catch (_) {}
     return null;
   }
+
+  Future<LearningReport> getLearningReport({
+    String period = 'annual',
+    int? year,
+    int? month,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'period': period,
+        if (year != null) 'year': year,
+        if (month != null) 'month': month,
+      };
+      final response = await _dio.get(
+        '/progress/analytics/wrapped/',
+        queryParameters: queryParams,
+      );
+      return LearningReport.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return LearningReport(
+          periodType: period,
+          periodLabel: '$year Blinkist Wrapped',
+          year: year ?? DateTime.now().year,
+          totalMinutes: 0,
+          totalHours: 0.0,
+          readingMinutes: 0,
+          audioMinutes: 0,
+          audioPercentage: 50,
+          readingPercentage: 50,
+          booksCompletedCount: 0,
+          sectionsCompletedCount: 0,
+          timeSavedHours: 0.0,
+          timeSavedDays: 0.0,
+          topCategories: const [],
+          learnerArchetype: 'The Lifelong Polymath',
+          learnerArchetypeDescription:
+              'Curious and multifaceted explorer of big ideas.',
+          completedActionPlans: 0,
+          habitsFormed: 0,
+          keyIdeasRetained: 0,
+          activeDaysCount: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          shareableText: '',
+        );
+      }
+      rethrow;
+    }
+  }
 }
 
 @riverpod
@@ -427,9 +476,14 @@ final badgesProvider = FutureProvider<List<UserBadgeItem>>((ref) async {
   return ref.watch(progressRepositoryProvider).getBadges();
 });
 
+final learningReportProvider = FutureProvider<LearningReport>((ref) async {
+  return ref.watch(progressRepositoryProvider).getLearningReport();
+});
+
 final crossDevicePlaybackSessionProvider =
     FutureProvider<CrossDevicePlaybackSession?>((ref) async {
   return ref.watch(progressRepositoryProvider).getActivePlaybackSession();
 });
+
 
 

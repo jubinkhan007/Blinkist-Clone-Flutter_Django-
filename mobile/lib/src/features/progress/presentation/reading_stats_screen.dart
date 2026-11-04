@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/progress_repository.dart';
 import '../domain/reading_stats_models.dart';
+import 'widgets/time_saved_card.dart';
 
 class ReadingStatsScreen extends ConsumerStatefulWidget {
   const ReadingStatsScreen({super.key});
@@ -47,6 +48,8 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
                 _buildHeroStreakCard(context, stats),
+                const SizedBox(height: 12),
+                TimeSavedCard(stats: stats),
                 const SizedBox(height: 16),
                 _buildPeriodBreakdownCard(context, stats),
                 const SizedBox(height: 16),

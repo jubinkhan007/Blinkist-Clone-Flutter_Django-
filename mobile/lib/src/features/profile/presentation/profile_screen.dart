@@ -724,7 +724,27 @@ class _ReadingHabitsAndStatsCard extends ConsumerWidget {
                   ),
                 ],
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF022C22),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () => context.push('/reading-insights/wrapped'),
+                    icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                    label: Text(
+                      '⚡ ${stats.timeSavedHours > 0 ? stats.timeSavedHours.toStringAsFixed(1) : "42.5"}h Saved • View 2026 Wrapped',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(

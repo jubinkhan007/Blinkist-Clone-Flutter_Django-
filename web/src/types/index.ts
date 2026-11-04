@@ -112,3 +112,103 @@ export interface ActivePlaybackSession {
   updated_at?: string;
 }
 
+export interface HeatmapDay {
+  date: string;
+  day_of_week: number; // 0 = Mon, 6 = Sun
+  reading_minutes: number;
+  audio_minutes: number;
+  total_minutes: number;
+  books_completed: number;
+  intensity: number; // 0..4
+  is_active: boolean;
+}
+
+export interface ReadingPeriodStats {
+  reading_minutes: number;
+  audio_minutes: number;
+  total_minutes: number;
+  days_active: number;
+  books_completed: number;
+}
+
+export interface UserBadgeItem {
+  key: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: string;
+  is_unlocked: boolean;
+  unlocked_at?: string | null;
+  current_progress: number;
+  target_progress: number;
+  progress_percent: number;
+}
+
+export interface ReadingStats {
+  current_streak: number;
+  longest_streak: number;
+  last_active_date?: string | null;
+  is_active_today: boolean;
+  total_sections_read: number;
+  total_books_completed: number;
+  total_audio_minutes: number;
+  total_reading_minutes: number;
+  total_highlights: number;
+  time_saved_hours: number;
+  time_saved_minutes: number;
+  monthly_time_saved_hours: number;
+  equivalent_full_books: number;
+  weekly_activity: boolean[];
+  weekly: ReadingPeriodStats;
+  monthly: ReadingPeriodStats;
+  activity_heatmap: HeatmapDay[];
+  unlocked_badges_count: number;
+  total_badges_count: number;
+  recent_badges: UserBadgeItem[];
+}
+
+export interface TopCategory {
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
+  icon: string;
+}
+
+export interface TopBook {
+  id: number;
+  slug?: string;
+  title: string;
+  author: string;
+  cover_image_url?: string | null;
+  sections_completed: number;
+}
+
+export interface LearningReport {
+  period_type: "annual" | "monthly";
+  period_label: string;
+  year: number;
+  total_minutes: number;
+  total_hours: number;
+  reading_minutes: number;
+  audio_minutes: number;
+  audio_percentage: number;
+  reading_percentage: number;
+  books_completed_count: number;
+  sections_completed_count: number;
+  time_saved_hours: number;
+  time_saved_days: number;
+  top_categories: TopCategory[];
+  learner_archetype: string;
+  learner_archetype_description: string;
+  completed_action_plans: number;
+  habits_formed: number;
+  key_ideas_retained: number;
+  active_days_count: number;
+  current_streak: number;
+  longest_streak: number;
+  top_book?: TopBook | null;
+  shareable_text: string;
+}
+
+
