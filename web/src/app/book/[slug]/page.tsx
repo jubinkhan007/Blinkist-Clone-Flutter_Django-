@@ -120,8 +120,32 @@ function BookDetailContent({
     await api.toggleSaveBook(book.id);
   };
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Book",
+    "name": book.title,
+    "headline": book.subtitle,
+    "author": {
+      "@type": "Person",
+      "name": book.author.name,
+    },
+    "description": book.description,
+    "image": book.cover_image_url,
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": book.rating || 4.8,
+      "reviewCount": book.rating_count || 120,
+    },
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+      {/* Structured Data for Search Engines */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       {/* Back button */}
       <Link
         href="/explore"

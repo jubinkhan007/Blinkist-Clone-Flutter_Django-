@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../src/features/reader/presentation/reader_options_provider.dart';
 
 String get kApiBaseUrl {
+  const envUrl = String.fromEnvironment('API_BASE_URL');
+  if (envUrl.isNotEmpty) return envUrl;
   if (kIsWeb) return 'http://localhost:8001/api/v1';
   if (Platform.isAndroid) return 'http://10.0.2.2:8001/api/v1';
   return 'http://localhost:8001/api/v1';

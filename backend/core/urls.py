@@ -19,9 +19,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from core.health import health_check
 import core.admin_audit  # Register LogEntry in Unfold admin
 
 urlpatterns = [
+    path('healthz/', health_check, name='healthz'),
+    path('api/health/', health_check, name='api_health'),
     path('admin/', admin.site.urls),
     path('api/v1/', include('apps.accounts.urls')),
     path('api/v1/catalog/', include('apps.catalog.urls')),

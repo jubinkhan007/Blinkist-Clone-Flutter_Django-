@@ -1,0 +1,8 @@
+# Android Release Keystore Configuration Example
+# Copy this file to `mobile/android/key.properties` and replace with your production signing credentials.
+# NEVER commit the actual key.properties or keystore .jks file to public version control!
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=/path/to/upload-keystore.jks
