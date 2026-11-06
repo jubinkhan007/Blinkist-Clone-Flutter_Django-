@@ -16,6 +16,7 @@ import {
 import { Book } from "@/types";
 import { api } from "@/lib/api";
 import { useAudio } from "@/context/AudioContext";
+import { AskBookAiDrawer } from "@/components/AskBookAiDrawer";
 
 function BookDetailContent({
   params,
@@ -28,6 +29,7 @@ function BookDetailContent({
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [showAiDrawer, setShowAiDrawer] = useState(false);
 
   const { playTrack, currentTrack, isPlaying, togglePlay } = useAudio();
 
@@ -256,7 +258,7 @@ function BookDetailContent({
 
             <button
               onClick={() => handlePlayAudio(0)}
-              className="px-8 py-3.5 rounded-full bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 active:scale-95 text-white dark:text-gray-900 font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all"
+              className="px-8 py-3.5 rounded-full bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 active:scale-95 text-white dark:text-gray-900 font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               {isCurrentBookPlaying ? (
                 <>
@@ -270,6 +272,15 @@ function BookDetailContent({
                   Listen to Audio
                 </>
               )}
+            </button>
+
+            <button
+              onClick={() => setShowAiDrawer(true)}
+              className="px-6 py-3.5 rounded-full border border-teal-500/40 bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100/80 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-300 font-bold text-sm shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              title="Ask the Book AI Assistant"
+            >
+              <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-pulse" />
+              Ask AI
             </button>
 
             <button
@@ -369,6 +380,15 @@ function BookDetailContent({
           </div>
         </div>
       </div>
+
+      {/* Ask the Book AI Drawer */}
+      <AskBookAiDrawer
+        isOpen={showAiDrawer}
+        onClose={() => setShowAiDrawer(false)}
+        bookSlug={book.slug}
+        bookTitle={book.title}
+        authorName={book.author?.name}
+      />
     </div>
   );
 }

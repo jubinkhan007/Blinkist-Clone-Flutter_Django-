@@ -230,4 +230,26 @@ export interface LearningReport {
   shareable_text: string;
 }
 
+export interface AskAiCitation {
+  section_order?: number;
+  section_title?: string;
+  section_slug?: string;
+}
 
+export interface AskAiResponse {
+  answer: string;
+  book_title?: string;
+  section_title?: string | null;
+  citations?: AskAiCitation[];
+  suggested_followups?: string[];
+}
+
+export interface AskAiMessage {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: string;
+  sectionTitle?: string;
+  citations?: AskAiCitation[];
+  suggestedFollowups?: string[];
+}

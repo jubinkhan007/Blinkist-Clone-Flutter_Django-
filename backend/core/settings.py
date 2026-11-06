@@ -167,6 +167,25 @@ AUTH_USER_MODEL = 'accounts.User'
 
 # Celery Configuration
 CELERY_BROKER_URL = env('REDIS_URL', default='redis://localhost:6379/1')
+CELERY_RESULT_BACKEND = env('REDIS_URL', default='redis://localhost:6379/1')
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    'daily_pick_morning_dispatch': {
+        'task': 'apps.notifications.tasks.dispatch_daily_pick_notifications',
+        'schedule': 86400.0,
+    },
+    'evening_streak_saver_dispatch': {
+        'task': 'apps.notifications.tasks.dispatch_streak_reminder_notifications',
+        'schedule': 86400.0,
+    },
+    'sunday_weekly_digest_dispatch': {
+        'task': 'apps.notifications.tasks.dispatch_weekly_digest_notifications',
+        'schedule': 604800.0,
+    },
+}
 
 # AI Pipeline Settings
 OPENAI_API_KEY = env('OPENAI_API_KEY', default='')

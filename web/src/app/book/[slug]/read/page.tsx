@@ -16,10 +16,12 @@ import {
   Trash2,
   Plus,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { Book, SummarySection, UserHighlight } from "@/types";
 import { api } from "@/lib/api";
 import { useAudio } from "@/context/AudioContext";
+import { AskBookAiDrawer } from "@/components/AskBookAiDrawer";
 
 type ReaderTheme = "light" | "sepia" | "dark";
 type ReaderFont = "serif" | "sans";
@@ -44,6 +46,7 @@ function ReaderContent({
   const [size, setSize] = useState<ReaderSize>("md");
   const [showSettings, setShowSettings] = useState(false);
   const [showToc, setShowToc] = useState(false);
+  const [showAiDrawer, setShowAiDrawer] = useState(false);
 
   // Live Margin Notes & Highlights
   const [highlights, setHighlights] = useState<UserHighlight[]>([]);
@@ -288,6 +291,17 @@ function ReaderContent({
             <span className="hidden sm:inline">
               {isCurrentBlinkAudioPlaying ? "Pause" : "Listen"}
             </span>
+          </button>
+
+          {/* Ask the Book AI Drawer Toggle */}
+          <button
+            onClick={() => setShowAiDrawer(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+            title="Ask the Book AI Assistant (Gemini Grounded)"
+            aria-label="Ask the Book AI"
+          >
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+            <span className="hidden sm:inline">Ask AI</span>
           </button>
 
           {/* Notes & Highlights Drawer Toggle */}
@@ -593,6 +607,27 @@ function ReaderContent({
           </div>
         </div>
       )}
+
+      {/* Ask the Book AI Drawer */}
+      <AskBookAiDrawer
+        isOpen={showAiDrawer}
+        onClose={() => setShowAiDrawer(false)}
+        bookSlug={book.slug}
+        bookTitle={book.title}
+        authorName={book.author?.name}
+        currentSectionSlug={currentSection?.slug}
+        currentSectionTitle={currentSection?.title}
+        onCitationClick={(sectionSlug, sectionOrder) => {
+          const targetIdx = sections.findIndex(
+            (s) => s.slug === sectionSlug || (sectionOrder !== undefined && s.order === sectionOrder)
+          );
+          if (targetIdx !== -1) {
+            setCurrentSectionIndex(targetIdx);
+            setShowAiDrawer(false);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        }}
+      />
 
       {/* Main Reading Canvas */}
       <main
