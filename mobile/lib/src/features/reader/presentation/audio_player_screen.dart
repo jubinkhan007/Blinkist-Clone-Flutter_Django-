@@ -7,6 +7,7 @@ import '../../book/domain/book_models.dart';
 import '../data/audio_bookmark_repository.dart';
 import 'ask_book_ai_sheet.dart';
 import 'audio_controller.dart';
+import 'voice_picker_sheet.dart';
 
 class AudioPlayerScreen extends ConsumerStatefulWidget {
   final String slug;
@@ -1610,6 +1611,50 @@ class _PlayerViewState extends ConsumerState<_PlayerView> {
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Narrator Voice selector chip
+                      InkWell(
+                        onTap: () => VoicePickerSheet.show(context),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant
+                                  .withOpacity(0.5),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.mic_rounded,
+                                size: 14,
+                                color: Color(0xFF10B981),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                audioState.activeVoiceName,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                             ],

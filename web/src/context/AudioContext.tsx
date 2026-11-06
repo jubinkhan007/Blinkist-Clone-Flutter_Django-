@@ -8,7 +8,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { AudioTrack, ActivePlaybackSession } from "@/types";
+import { AudioTrack, ActivePlaybackSession, VoicePersona } from "@/types";
 import { api } from "@/lib/api";
 
 interface AudioContextType {
@@ -19,6 +19,10 @@ interface AudioContextType {
   playbackRate: number;
   volume: number;
   handoffSession: ActivePlaybackSession | null;
+  selectedVoice: VoicePersona | null;
+  availableVoices: VoicePersona[];
+  isSwitchingVoice: boolean;
+  setVoice: (voiceId: string) => Promise<boolean>;
   playTrack: (track: AudioTrack) => void;
   togglePlay: () => void;
   pause: () => void;
@@ -40,6 +44,10 @@ const AudioContext = createContext<AudioContextType>({
   playbackRate: 1,
   volume: 1,
   handoffSession: null,
+  selectedVoice: null,
+  availableVoices: [],
+  isSwitchingVoice: false,
+  setVoice: async () => false,
   playTrack: () => {},
   togglePlay: () => {},
   pause: () => {},
@@ -63,9 +71,34 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
   const [playbackRate, setPlaybackRateState] = useState(1);
   const [volume, setVolumeState] = useState(1);
   const [handoffSession, setHandoffSession] = useState<ActivePlaybackSession | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<VoicePersona[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<VoicePersona | null>(null);
+  const [isSwitchingVoice, setIsSwitchingVoice] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSyncTimeRef = useRef<number>(0);
+
+  // Load voice personas and user preferred voice on mount
+  useEffect(() => {
+    async function loadVoices() {
+      try {
+        const catalog = await api.getVoiceCatalog();
+        if (catalog && catalog.voices) {
+          setAvailableVoices(catalog.voices);
+          const savedVoiceId =
+            typeof window !== "undefined"
+              ? localStorage.getItem("blinkist_preferred_voice")
+              : null;
+          const initialVoice =
+            catalog.voices.find((v) => v.id === savedVoiceId) ||
+            catalog.voices.find((v) => v.id === catalog.default_voice) ||
+            catalog.voices[0];
+          setSelectedVoice(initialVoice || null);
+        }
+      } catch (_) {}
+    }
+    loadVoices();
+  }, []);
 
   // Check for active sessions from other devices on mount and tab focus
   const checkCrossDeviceSession = useCallback(async () => {
@@ -177,7 +210,12 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const playTrack = useCallback(
     (track: AudioTrack) => {
-      setCurrentTrack(track);
+      const trackWithVoice: AudioTrack = {
+        ...track,
+        voiceId: track.voiceId || selectedVoice?.id || "christopher",
+        voiceName: track.voiceName || selectedVoice?.name || "Christopher",
+      };
+      setCurrentTrack(trackWithVoice);
       if (audioRef.current) {
         audioRef.current.src = track.audioUrl;
         audioRef.current.playbackRate = playbackRate;
@@ -186,7 +224,53 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
         audioRef.current.play().catch(() => {});
       }
     },
-    [playbackRate, volume]
+    [playbackRate, volume, selectedVoice]
+  );
+
+  const setVoice = useCallback(
+    async (voiceId: string): Promise<boolean> => {
+      const targetVoice = availableVoices.find((v) => v.id === voiceId);
+      if (!targetVoice) return false;
+
+      setSelectedVoice(targetVoice);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("blinkist_preferred_voice", voiceId);
+      }
+      api.setPreferredVoice(voiceId);
+
+      // Seamless live voice switching if current track has section details
+      if (currentTrack && currentTrack.bookSlug && currentTrack.sectionSlug) {
+        setIsSwitchingVoice(true);
+        try {
+          const audioData = await api.getSectionVoiceAudio(
+            currentTrack.bookSlug,
+            currentTrack.sectionSlug,
+            voiceId
+          );
+          if (audioData && audioData.audio_url && audioRef.current) {
+            const wasPlaying = isPlaying;
+            const currentPos = audioRef.current.currentTime;
+            audioRef.current.src = audioData.audio_url;
+            audioRef.current.currentTime = currentPos;
+            setCurrentTime(currentPos);
+            setCurrentTrack({
+              ...currentTrack,
+              audioUrl: audioData.audio_url,
+              voiceId: targetVoice.id,
+              voiceName: targetVoice.name,
+            });
+            if (wasPlaying) {
+              audioRef.current.play().catch(() => {});
+            }
+          }
+        } catch (_) {
+        } finally {
+          setIsSwitchingVoice(false);
+        }
+      }
+      return true;
+    },
+    [availableVoices, currentTrack, isPlaying]
   );
 
   const togglePlay = useCallback(() => {
@@ -298,6 +382,10 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
         playbackRate,
         volume,
         handoffSession,
+        selectedVoice,
+        availableVoices,
+        isSwitchingVoice,
+        setVoice,
         playTrack,
         togglePlay,
         pause,

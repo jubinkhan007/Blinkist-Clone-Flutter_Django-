@@ -278,3 +278,142 @@ class UserAudioBookmarkApiTests(APITestCase):
         self.assertEqual(resp.status_code, 204)
         self.assertFalse(UserAudioBookmark.objects.filter(id=bookmark.id).exists())
 
+
+class MultiVoiceNarrationApiTests(APITestCase):
+    def setUp(self):
+        from apps.accounts.models import User
+        self.user = User.objects.create_user(
+            email='listener@example.com',
+            username='listener',
+            password='Password123!',
+            is_premium=False,
+        )
+        self.premium_user = User.objects.create_user(
+            email='premium_listener@example.com',
+            username='premium_listener',
+            password='Password123!',
+            is_premium=True,
+        )
+
+        author = Author.objects.create(name='James Clear')
+        category = Category.objects.create(name='Productivity', slug='productivity')
+        self.book = Book.objects.create(
+            title='Atomic Habits',
+            subtitle='An Easy & Proven Way to Build Good Habits',
+            slug='atomic-habits-voice-test',
+            author=author,
+            description='Tiny changes, remarkable results.',
+            what_you_will_learn='Four laws of behavior change.',
+            is_premium=False,
+        )
+        self.book.categories.add(category)
+
+        self.section = SummarySection.objects.create(
+            book=self.book,
+            slug='the-fundamentals',
+            order=1,
+            title='The Fundamentals: Why Tiny Changes Make a Big Difference',
+            content='Habits are the compound interest of self-improvement.',
+            plain_text='Habits are the compound interest of self-improvement.',
+            duration_seconds=180,
+            estimated_read_minutes=3,
+        )
+
+    def test_voice_catalog_endpoint(self):
+        url = reverse('voice_catalog')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('voices', response.data)
+        voices = response.data['voices']
+        self.assertEqual(len(voices), 5)
+
+        voice_ids = [v['id'] for v in voices]
+        self.assertIn('christopher', voice_ids)
+        self.assertIn('jenny', voice_ids)
+        self.assertIn('guy', voice_ids)
+        self.assertIn('sonia', voice_ids)
+        self.assertIn('brian', voice_ids)
+
+        self.assertEqual(response.data['default_voice'], 'christopher')
+
+    def test_section_voice_audio_default_voice(self):
+        url = reverse(
+            'summary_section_voice_audio',
+            kwargs={'book_slug': self.book.slug, 'slug': self.section.slug},
+        )
+        response = self.client.get(f"{url}?voice=christopher")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['voice'], 'christopher')
+        self.assertEqual(response.data['voice_name'], 'Christopher')
+        self.assertEqual(response.data['voice_persona'], 'The Thoughtful Strategist')
+
+    def test_section_voice_audio_free_tier_custom_voice(self):
+        url = reverse(
+            'summary_section_voice_audio',
+            kwargs={'book_slug': self.book.slug, 'slug': self.section.slug},
+        )
+        response = self.client.get(f"{url}?voice=jenny")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['voice'], 'jenny')
+        self.assertEqual(response.data['voice_name'], 'Jenny')
+        self.assertEqual(response.data['voice_persona'], 'The Calm Storyteller')
+
+    def test_section_voice_audio_premium_voice_gating(self):
+        url = reverse(
+            'summary_section_voice_audio',
+            kwargs={'book_slug': self.book.slug, 'slug': self.section.slug},
+        )
+
+        # 1. Anonymous or Free user requesting premium voice (Sonia) -> 403
+        response = self.client.get(f"{url}?voice=sonia")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['error'], 'premium_voice_required')
+        self.assertTrue(response.data['upgrade_required'])
+
+        # 2. Premium user requesting premium voice (Sonia) -> 200
+        self.client.force_authenticate(self.premium_user)
+        response = self.client.get(f"{url}?voice=sonia")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['voice'], 'sonia')
+        self.assertEqual(response.data['voice_name'], 'Sonia')
+
+    def test_user_voice_preference_get_and_post(self):
+        url = reverse('voice_preference')
+
+        # Get default
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['preferred_voice'], 'christopher')
+
+        # Free user cannot set premium voice
+        self.client.force_authenticate(self.user)
+        response = self.client.post(url, {'voice': 'sonia'})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['error'], 'premium_voice_required')
+
+        # Free user can set free voice (Guy)
+        response = self.client.post(url, {'voice': 'guy'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['preferred_voice'], 'guy')
+
+        # Invalid voice returns 400
+        response = self.client.post(url, {'voice': 'non_existent_robot'})
+        self.assertEqual(response.status_code, 400)
+
+        # Premium user can set premium voice
+        self.client.force_authenticate(self.premium_user)
+        response = self.client.post(url, {'voice': 'brian'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['preferred_voice'], 'brian')
+
+    def test_summary_section_serializer_exposes_available_voices(self):
+        url = reverse(
+            'summary_section_detail',
+            kwargs={'book_slug': self.book.slug, 'slug': self.section.slug},
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('availableVoices', response.data)
+        self.assertEqual(len(response.data['availableVoices']), 5)
+
+

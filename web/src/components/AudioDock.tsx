@@ -11,8 +11,10 @@ import {
   VolumeX,
   X,
   BookOpen,
+  Mic,
 } from "lucide-react";
 import { useAudio } from "@/context/AudioContext";
+import { VoiceSwitcherModal } from "./VoiceSwitcherModal";
 
 const formatTime = (seconds: number): string => {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -29,6 +31,7 @@ export const AudioDock: React.FC = () => {
     duration,
     playbackRate,
     volume,
+    selectedVoice,
     togglePlay,
     seek,
     skip,
@@ -38,6 +41,7 @@ export const AudioDock: React.FC = () => {
   } = useAudio();
 
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [prevVolume, setPrevVolume] = useState(1);
 
   if (!currentTrack) return null;
@@ -154,8 +158,19 @@ export const AudioDock: React.FC = () => {
             </button>
           </div>
 
-          {/* Right: Rate, Volume & Close */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          {/* Right: Rate, Voice, Volume & Close */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Narrator Voice Button */}
+            <button
+              onClick={() => setShowVoiceModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title={`AI Narrator: ${selectedVoice?.name || "Christopher"}`}
+              aria-label="Switch AI narrator voice"
+            >
+              <Mic className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="hidden sm:inline font-medium">{selectedVoice?.name || "Voice"}</span>
+            </button>
+
             {/* Speed Rate Menu */}
             <div className="relative">
               <button
@@ -226,6 +241,12 @@ export const AudioDock: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Voice Switcher Modal */}
+      <VoiceSwitcherModal
+        isOpen={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+      />
     </aside>
   );
 };

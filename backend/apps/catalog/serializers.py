@@ -58,6 +58,14 @@ class SummarySectionListSerializer(serializers.ModelSerializer):
         if not _can_access_summary(obj.book, request):
             return None
 
+        if request:
+            requested_voice = request.query_params.get('voice') or request.headers.get('X-Narration-Voice')
+            if requested_voice and requested_voice != 'christopher':
+                from apps.summaries.voice_service import resolve_section_voice_audio
+                voice_data = resolve_section_voice_audio(obj, voice_id=requested_voice, request=request)
+                if voice_data.get('audio_url'):
+                    return voice_data['audio_url']
+
         if obj.audio_file:
             if request:
                 return request.build_absolute_uri(obj.audio_file.url)

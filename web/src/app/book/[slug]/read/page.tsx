@@ -195,6 +195,7 @@ function ReaderContent({
       authorName: book.author.name,
       coverUrl: book.cover_image_url,
       sectionTitle: currentSection.title,
+      sectionSlug: currentSection.slug,
       sectionIndex: currentSectionIndex,
       totalSections,
       audioUrl:

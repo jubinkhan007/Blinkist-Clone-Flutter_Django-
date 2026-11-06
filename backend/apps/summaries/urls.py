@@ -7,8 +7,17 @@ from .flashcard_views import (
     FlashcardReviewView,
     DailyReviewDeckView,
 )
+from .voice_views import (
+    VoiceCatalogView,
+    SectionVoiceAudioView,
+    UserVoicePreferenceView,
+)
 
 urlpatterns = [
+    # Multi-Voice Narration Endpoints
+    path('voices/', VoiceCatalogView.as_view(), name='voice_catalog'),
+    path('voices/preference/', UserVoicePreferenceView.as_view(), name='voice_preference'),
+
     # Book AI Q&A Endpoint
     path('<slug:slug>/ask/', BookAskAiView.as_view(), name='summary_ask_ai'),
 
@@ -19,5 +28,6 @@ urlpatterns = [
 
     # Summary Sections
     path('<slug:book_slug>/', SummarySectionListView.as_view(), name='summary_section_list'),
+    path('<slug:book_slug>/<slug:slug>/audio/', SectionVoiceAudioView.as_view(), name='summary_section_voice_audio'),
     path('<slug:book_slug>/<slug:slug>/', SummarySectionDetailView.as_view(), name='summary_section_detail'),
 ]

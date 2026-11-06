@@ -12,19 +12,6 @@ class CollectionDetailScreen extends ConsumerWidget {
 
   const CollectionDetailScreen({super.key, required this.slug});
 
-  Color _parseColor(String? hex, {Color fallback = const Color(0xFF0284C7)}) {
-    if (hex == null || hex.isEmpty) return fallback;
-    final clean = hex.replaceAll('#', '');
-    if (clean.length == 6) {
-      final val = int.tryParse('FF$clean', radix: 16);
-      if (val != null) return Color(val);
-    } else if (clean.length == 8) {
-      final val = int.tryParse(clean, radix: 16);
-      if (val != null) return Color(val);
-    }
-    return fallback;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final collectionAsync = ref.watch(collectionDetailProvider(slug));

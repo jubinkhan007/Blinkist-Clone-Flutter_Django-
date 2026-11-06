@@ -1,4 +1,4 @@
-import { Book, Category, DailyBlink, User, ActivePlaybackSession, UserHighlight, ReadingStats, LearningReport } from "@/types";
+import { Book, Category, DailyBlink, User, ActivePlaybackSession, UserHighlight, ReadingStats, LearningReport, VoicePersona } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -682,6 +682,117 @@ class ApiClient {
       },
       shareable_text: `🎉 My ${year} Blinkist Wrapped!\n\n🧠 Archetype: The Hyper-Productive Strategist\n⚡ Time Saved: 42.5 hours\n📚 Summaries Explored: 6 completed (5.4h learning)\n🎯 Core Domain: Productivity & Time Management\n🔥 Longest Streak: 14 days\n\n#Blinkist #LifelongLearning #BlinkistWrapped`,
     };
+  }
+
+  async getVoiceCatalog(): Promise<{ voices: VoicePersona[]; default_voice: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/summaries/voices/`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+
+    return {
+      voices: [
+        {
+          id: "christopher",
+          name: "Christopher",
+          persona: "The Thoughtful Strategist",
+          gender: "male",
+          accent: "US English",
+          description: "Warm, authoritative, deliberate cadence. Ideal for strategy, leadership, and deep focus.",
+          avatar: "👨‍💼",
+          is_default: true,
+          is_premium: false,
+          is_unlocked: true,
+          speed_recommendation: 1.0,
+        },
+        {
+          id: "jenny",
+          name: "Jenny",
+          persona: "The Calm Storyteller",
+          gender: "female",
+          accent: "US English",
+          description: "Empathetic, clear, and engaging rhythm. Ideal for mindfulness, psychology, and personal growth.",
+          avatar: "👩‍💼",
+          is_default: false,
+          is_premium: false,
+          is_unlocked: true,
+          speed_recommendation: 1.0,
+        },
+        {
+          id: "guy",
+          name: "Guy",
+          persona: "The Energetic Executive",
+          gender: "male",
+          accent: "US English",
+          description: "Crisp, dynamic, high-momentum delivery. Perfect for productivity, business, and economics.",
+          avatar: "⚡",
+          is_default: false,
+          is_premium: false,
+          is_unlocked: true,
+          speed_recommendation: 1.1,
+        },
+        {
+          id: "sonia",
+          name: "Sonia",
+          persona: "The Refined Scholar",
+          gender: "female",
+          accent: "British English",
+          description: "Articulate, nuanced, British eloquence. Best for science, philosophy, and historical deep dives.",
+          avatar: "🎓",
+          is_default: false,
+          is_premium: true,
+          is_unlocked: false,
+          speed_recommendation: 1.0,
+        },
+        {
+          id: "brian",
+          name: "Brian",
+          persona: "The Modern Innovator",
+          gender: "male",
+          accent: "US English",
+          description: "Fresh, conversational, upbeat delivery. Great for technology, creativity, and modern biographies.",
+          avatar: "🚀",
+          is_default: false,
+          is_premium: true,
+          is_unlocked: false,
+          speed_recommendation: 1.05,
+        },
+      ],
+      default_voice: "christopher",
+    };
+  }
+
+  async getSectionVoiceAudio(
+    bookSlug: string,
+    sectionSlug: string,
+    voiceId: string
+  ): Promise<{ audio_url: string; duration_seconds: number; voice: string; is_fallback?: boolean } | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/summaries/${bookSlug}/${sectionSlug}/audio/?voice=${voiceId}`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async setPreferredVoice(voiceId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/summaries/voices/preference/`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({ voice: voiceId }),
+      });
+      return res.ok;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

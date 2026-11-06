@@ -161,6 +161,32 @@ class ContentRepository {
       rethrow;
     }
   }
+
+  Future<String?> getSectionVoiceAudio({
+    required String bookSlug,
+    required String sectionSlug,
+    required String voiceId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/summaries/$bookSlug/$sectionSlug/audio/',
+        queryParameters: {'voice': voiceId},
+      );
+      if (response.data != null && response.data['audio_url'] != null) {
+        return response.data['audio_url'] as String;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> saveVoicePreference(String voiceId) async {
+    try {
+      await _dio.post(
+        '/summaries/voices/preference/',
+        data: {'voice': voiceId},
+      );
+    } catch (_) {}
+  }
 }
 
 @riverpod

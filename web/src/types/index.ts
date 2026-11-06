@@ -12,6 +12,20 @@ export interface Category {
   description?: string;
 }
 
+export interface VoicePersona {
+  id: string;
+  name: string;
+  persona: string;
+  gender: "male" | "female";
+  accent: string;
+  description: string;
+  avatar: string;
+  is_default: boolean;
+  is_premium: boolean;
+  is_unlocked?: boolean;
+  speed_recommendation?: number;
+}
+
 export interface SummarySection {
   id: number;
   slug: string;
@@ -21,6 +35,7 @@ export interface SummarySection {
   estimated_read_minutes: number;
   audio_url?: string | null;
   content?: string | null;
+  availableVoices?: VoicePersona[];
 }
 
 export interface Book {
@@ -74,6 +89,10 @@ export interface AudioTrack {
   totalSections: number;
   audioUrl: string;
   durationSeconds: number;
+  sectionSlug?: string;
+  voiceId?: string;
+  voiceName?: string;
+  availableVoices?: VoicePersona[];
 }
 
 export interface UserHighlight {

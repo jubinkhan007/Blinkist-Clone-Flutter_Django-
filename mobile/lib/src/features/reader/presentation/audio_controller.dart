@@ -12,6 +12,7 @@ import '../../media/data/daily_digest_repository.dart';
 import '../../media/domain/daily_digest_models.dart';
 import '../../progress/data/progress_repository.dart';
 import '../data/audio_handler.dart';
+import '../domain/voice_models.dart';
 
 class QueuedBook {
   final int id;
@@ -80,6 +81,9 @@ class AudioState {
   final bool isDailyDigestMode;
   final int? activeDigestId;
   final String? dailyDigestTheme;
+  final String activeVoiceId;
+  final String activeVoiceName;
+  final List<VoicePersona> availableVoices;
 
   const AudioState({
     this.bookId,
@@ -104,6 +108,9 @@ class AudioState {
     this.isDailyDigestMode = false,
     this.activeDigestId,
     this.dailyDigestTheme,
+    this.activeVoiceId = 'christopher',
+    this.activeVoiceName = 'Christopher',
+    this.availableVoices = VoicePersona.defaultCatalog,
   });
 
   AudioState copyWith({
@@ -129,6 +136,9 @@ class AudioState {
     bool? isDailyDigestMode,
     Object? activeDigestId = _unset,
     Object? dailyDigestTheme = _unset,
+    String? activeVoiceId,
+    String? activeVoiceName,
+    List<VoicePersona>? availableVoices,
   }) {
     return AudioState(
       bookId: bookId == _unset ? this.bookId : bookId as int?,
@@ -163,6 +173,9 @@ class AudioState {
       dailyDigestTheme: dailyDigestTheme == _unset
           ? this.dailyDigestTheme
           : dailyDigestTheme as String?,
+      activeVoiceId: activeVoiceId ?? this.activeVoiceId,
+      activeVoiceName: activeVoiceName ?? this.activeVoiceName,
+      availableVoices: availableVoices ?? this.availableVoices,
     );
   }
 }
@@ -171,6 +184,7 @@ class AudioController extends StateNotifier<AudioState> {
   static const String _speedPrefKey = 'preferred_playback_speed';
   static const String _autoPlayPrefKey = 'audio_auto_play_next';
   static const String _queuePrefKey = 'audio_playback_queue';
+  static const String _voicePrefKey = 'preferred_narration_voice';
 
   final AppAudioHandler _handler;
   final ProgressRepository _progressRepository;
@@ -259,6 +273,12 @@ class AudioController extends StateNotifier<AudioState> {
 
       final autoPlay = prefs.getBool(_autoPlayPrefKey) ?? true;
 
+      final savedVoiceId = prefs.getString(_voicePrefKey) ?? 'christopher';
+      final matchingVoice = VoicePersona.defaultCatalog.firstWhere(
+        (v) => v.id == savedVoiceId,
+        orElse: () => VoicePersona.defaultCatalog.first,
+      );
+
       final savedQueueStr = prefs.getString(_queuePrefKey);
       List<QueuedBook> loadedQueue = [];
       if (savedQueueStr != null && savedQueueStr.isNotEmpty) {
@@ -271,9 +291,70 @@ class AudioController extends StateNotifier<AudioState> {
       state = state.copyWith(
         autoPlayNext: autoPlay,
         queue: loadedQueue,
+        activeVoiceId: matchingVoice.id,
+        activeVoiceName: matchingVoice.name,
       );
     } catch (e) {
       debugPrint('Failed to load audio settings: $e');
+    }
+  }
+
+  Future<void> switchVoice(String voiceId) async {
+    final voice = state.availableVoices.firstWhere(
+      (v) => v.id == voiceId,
+      orElse: () => VoicePersona.defaultCatalog.first,
+    );
+    state = state.copyWith(
+      activeVoiceId: voice.id,
+      activeVoiceName: voice.name,
+    );
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_voicePrefKey, voice.id);
+      await _contentRepository.saveVoicePreference(voice.id);
+    } catch (e) {
+      debugPrint('Failed to save preferred voice: $e');
+    }
+
+    // If a book is currently loaded and playing, seamlessly fetch new voice audio
+    if (state.bookSlug != null && currentSection != null) {
+      final curPos = state.currentPosition;
+      final wasPlaying = state.isPlaying;
+      try {
+        final newAudioUrl = await _contentRepository.getSectionVoiceAudio(
+          bookSlug: state.bookSlug!,
+          sectionSlug: currentSection!.slug,
+          voiceId: voice.id,
+        );
+        if (newAudioUrl != null && newAudioUrl.isNotEmpty) {
+          final resolvedUrl = resolveServerUrl(newAudioUrl);
+          await _handler.playMediaItem(
+            MediaItem(
+              id: resolvedUrl,
+              album: state.bookTitle ?? 'Blinkist',
+              title: currentSection!.title,
+              artist: state.authorName ?? 'Blinkist',
+              artUri: state.coverImageUrl != null
+                  ? Uri.tryParse(resolveServerUrl(state.coverImageUrl!))
+                  : null,
+              duration: state.duration,
+              extras: {
+                'bookId': state.bookId,
+                'bookSlug': state.bookSlug,
+                'sectionId': currentSection!.id,
+                'voiceId': voice.id,
+              },
+            ),
+          );
+          await _handler.seek(curPos);
+          if (!wasPlaying) {
+            await _handler.pause();
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to switch voice audio live: $e');
+      }
     }
   }
 

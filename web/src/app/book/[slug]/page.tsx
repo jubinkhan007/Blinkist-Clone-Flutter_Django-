@@ -89,6 +89,7 @@ function BookDetailContent({
   const handlePlayAudio = (sectionIndex = 0) => {
     const section = book.sections?.[sectionIndex] || {
       id: `section_${sectionIndex}`,
+      slug: `section-${sectionIndex}`,
       title: "Key Takeaways",
       duration_seconds: 600,
       audio_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
@@ -107,6 +108,7 @@ function BookDetailContent({
       authorName: book.author.name,
       coverUrl: book.cover_image_url,
       sectionTitle: section.title,
+      sectionSlug: section.slug,
       sectionIndex,
       totalSections: book.sections?.length || 1,
       audioUrl: section.audio_url || "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
