@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { AudioTrack, ActivePlaybackSession, VoicePersona } from "@/types";
 import { api } from "@/lib/api";
+import { sentry } from "@/lib/sentry";
 
 interface AudioContextType {
   currentTrack: AudioTrack | null;
@@ -216,6 +217,13 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({
         voiceName: track.voiceName || selectedVoice?.name || "Christopher",
       };
       setCurrentTrack(trackWithVoice);
+
+      sentry.addBreadcrumb({
+        category: "audio",
+        message: `Started audio playback: "${track.sectionTitle || track.bookTitle}" (${trackWithVoice.voiceName})`,
+        data: { bookSlug: track.bookSlug, voiceId: trackWithVoice.voiceId },
+      });
+
       if (audioRef.current) {
         audioRef.current.src = track.audioUrl;
         audioRef.current.playbackRate = playbackRate;

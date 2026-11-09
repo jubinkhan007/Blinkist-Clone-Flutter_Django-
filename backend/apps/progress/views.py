@@ -30,6 +30,7 @@ from .serializers import (
 )
 from .action_plan_service import ActionPlanService, ActionPlanExportService
 from .badges import evaluate_and_award_badges
+from core.metrics import ACTIVE_SYNC_SESSIONS, SYNC_HANDOFFS_TOTAL
 
 
 def record_activity(user, reading_minutes=0, audio_minutes=0, sections_read=0, books_completed=0):
@@ -1142,11 +1143,17 @@ class PlaybackHandoffView(views.APIView):
             }
 
         prev_device = session.get('device_name', 'previous device')
+        prev_type = session.get('device_type', 'unknown')
         session['device_type'] = target_device
         session['device_name'] = target_name
         session['is_playing'] = True
         session['updated_at'] = timezone.now().isoformat()
         cache.set(cache_key, session, timeout=86400 * 7)
+
+        try:
+            SYNC_HANDOFFS_TOTAL.labels(source_device=prev_type, target_device=target_device).inc()
+        except Exception:
+            pass
 
         return response.Response({
             "status": "handed_off",

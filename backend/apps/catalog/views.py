@@ -1,9 +1,11 @@
+import time
 from django.db.models import Count
 from rest_framework import filters, generics, permissions, status, views
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.catalog.ai_service import ask_book_ai
 from apps.catalog.models import Book, Category, UserLibraryItem, Collection, UserAudioQueueItem
+from core.metrics import AI_QUERIES_TOTAL, AI_QUERY_LATENCY
 from apps.catalog.serializers import (
     BookListSerializer,
     BookDetailSerializer,
@@ -174,13 +176,23 @@ class BookAskAiView(views.APIView):
         if not isinstance(history, list):
             history = None
 
-        result = ask_book_ai(
-            book=book,
-            question=str(question).strip(),
-            section_slug=section_slug,
-            history=history,
-        )
-        return Response(result, status=status.HTTP_200_OK)
+        start_time = time.time()
+        try:
+            result = ask_book_ai(
+                book=book,
+                question=str(question).strip(),
+                section_slug=section_slug,
+                history=history,
+            )
+            duration = time.time() - start_time
+            AI_QUERY_LATENCY.labels(model="gemini", status="success").observe(duration)
+            AI_QUERIES_TOTAL.labels(status="success", model="gemini").inc()
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            duration = time.time() - start_time
+            AI_QUERY_LATENCY.labels(model="gemini", status="error").observe(duration)
+            AI_QUERIES_TOTAL.labels(status="error", model="gemini").inc()
+            raise e
 
 
 class UserAudioQueueView(generics.ListCreateAPIView):

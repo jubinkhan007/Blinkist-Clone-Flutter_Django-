@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # ── Django API & Prometheus Exporter ──────────────────────────────────────
+  - job_name: 'django_backend'
+    scrape_interval: 10s
+    metrics_path: '/metrics/'
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          app: 'blinkist_api'
+          environment: 'production'
+
+  # ── Prometheus Internal Metrics ───────────────────────────────────────────
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          app: 'blinkist_monitoring'

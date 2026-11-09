@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { AlertTriangle, RefreshCw, Home, ShieldAlert } from "lucide-react";
+import { sentry } from "@/lib/sentry";
 
 export default function Error({
   error,
@@ -11,8 +12,17 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [reportedEventId, setReportedEventId] = useState<string | null>(null);
+
   useEffect(() => {
     console.error("Application error boundary triggered:", error);
+    try {
+      const eventId = sentry.captureException(error, {
+        extra: { digest: error.digest },
+        tags: { boundary: "app.error" },
+      });
+      setReportedEventId(eventId);
+    } catch (_) {}
   }, [error]);
 
   return (
@@ -32,6 +42,11 @@ export default function Error({
           <p className="text-sm text-gray-600 dark:text-gray-400">
             We encountered an unexpected error while loading this page. Our telemetry service has logged the event.
           </p>
+          {reportedEventId && (
+            <p className="text-[11px] font-mono text-gray-400 dark:text-gray-500 pt-1">
+              Event Reference: <span className="underline select-all">{reportedEventId}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User } from "@/types";
+import { sentry } from "@/lib/sentry";
 
 interface AuthContextType {
   user: User | null;
@@ -29,7 +30,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const storedUser = localStorage.getItem("blinkist_user");
       if (storedUser) {
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        sentry.setUser({ id: parsed.id, email: parsed.email, username: parsed.username });
       } else {
         // Default authenticated demo guest for seamless experience
         const demoUser: User = {
@@ -43,6 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setUser(demoUser);
         localStorage.setItem("blinkist_user", JSON.stringify(demoUser));
+        sentry.setUser({ id: demoUser.id, email: demoUser.email, username: demoUser.username });
       }
     } catch (_) {}
     setIsLoading(false);
@@ -59,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minutes_read_today: 12,
     };
     setUser(loggedUser);
+    sentry.setUser({ id: loggedUser.id, email: loggedUser.email, username: loggedUser.username });
     localStorage.setItem("blinkist_user", JSON.stringify(loggedUser));
     localStorage.setItem("blinkist_token", "demo_jwt_token_header");
     return true;
@@ -75,6 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minutes_read_today: 0,
     };
     setUser(newUser);
+    sentry.setUser({ id: newUser.id, email: newUser.email, username: newUser.username });
     localStorage.setItem("blinkist_user", JSON.stringify(newUser));
     localStorage.setItem("blinkist_token", "demo_jwt_token_header");
     return true;
@@ -82,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
+    sentry.setUser(null);
     localStorage.removeItem("blinkist_user");
     localStorage.removeItem("blinkist_token");
   };

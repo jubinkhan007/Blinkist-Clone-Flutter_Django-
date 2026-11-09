@@ -50,3 +50,45 @@ def health_check(request):
         },
         status=status_code,
     )
+
+
+def metrics_view(request):
+    """
+    Prometheus metrics export endpoint.
+    Serves Prometheus text format metrics for scrapers.
+    """
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        from django.http import HttpResponse
+
+        return HttpResponse(generate_latest(), content_type=CONTENT_TYPE_LATEST)
+    except Exception as exc:
+        return JsonResponse(
+            {
+                'error': 'prometheus_metrics_unavailable',
+                'message': str(exc),
+            },
+            status=503,
+        )
+
+
+def trigger_sentry_error(request):
+    """
+    Diagnostic endpoint to verify Sentry exception reporting and alerting rules.
+    Accessible only in development mode (DEBUG=True) or by staff administrators.
+    """
+    from django.conf import settings
+
+    if not settings.DEBUG and not (request.user and request.user.is_staff):
+        return JsonResponse(
+            {
+                'error': 'forbidden',
+                'message': 'Sentry diagnostic test is only available in DEBUG mode or to staff users.',
+            },
+            status=403,
+        )
+
+    # Trigger intentional division by zero to verify Sentry capture
+    division_by_zero = 1 / 0
+    return JsonResponse({'status': 'ok', 'result': division_by_zero})
+

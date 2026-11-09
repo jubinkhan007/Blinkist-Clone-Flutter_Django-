@@ -15,6 +15,7 @@ from apps.summaries.voice_service import (
     get_voice_catalog,
     resolve_section_voice_audio,
 )
+from core.metrics import AUDIO_STREAMS_TOTAL
 
 
 class VoiceCatalogView(APIView):
@@ -88,6 +89,17 @@ class SectionVoiceAudioView(APIView):
             voice_id=voice_meta['id'],
             request=request,
         )
+
+        # Track Prometheus APM metric for narrator voice playback
+        try:
+            AUDIO_STREAMS_TOTAL.labels(
+                voice_id=voice_meta['id'],
+                book_slug=book.slug,
+                source='summary_section',
+            ).inc()
+        except Exception:
+            pass
+
         return Response(payload)
 
 

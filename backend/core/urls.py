@@ -19,12 +19,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-from core.health import health_check
+from core.health import health_check, metrics_view, trigger_sentry_error
 import core.admin_audit  # Register LogEntry in Unfold admin
 
 urlpatterns = [
     path('healthz/', health_check, name='healthz'),
     path('api/health/', health_check, name='api_health'),
+    path('metrics/', metrics_view, name='prometheus_metrics'),
+    path('api/sentry-debug/', trigger_sentry_error, name='sentry_debug'),
     path('admin/', admin.site.urls),
     path('api/v1/', include('apps.accounts.urls')),
     path('api/v1/catalog/', include('apps.catalog.urls')),
@@ -37,3 +39,10 @@ urlpatterns = [
     path('api/v1/notifications/', include('apps.notifications.urls')),
     path('api/v1/media/', include('apps.media.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Prometheus endpoint compatibility
+try:
+    import django_prometheus
+    urlpatterns.insert(0, path('', include('django_prometheus.urls')))
+except ImportError:
+    pass

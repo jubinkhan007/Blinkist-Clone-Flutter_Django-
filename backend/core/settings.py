@@ -76,6 +76,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Prometheus APM Middleware Instrumentation (when installed)
+try:
+    import django_prometheus
+    INSTALLED_APPS.insert(0, 'django_prometheus')
+    MIDDLEWARE.insert(0, 'django_prometheus.middleware.PrometheusBeforeMiddleware')
+    MIDDLEWARE.append('django_prometheus.middleware.PrometheusAfterMiddleware')
+except ImportError:
+    pass
+
 ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
@@ -186,6 +195,45 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 604800.0,
     },
 }
+
+# ── Sentry APM & Real-Time Error Tracking ────────────────────────────────────
+SENTRY_DSN = env('SENTRY_DSN', default='')
+SENTRY_ENVIRONMENT = env('SENTRY_ENVIRONMENT', default='production' if not DEBUG else 'development')
+SENTRY_TRACES_SAMPLE_RATE = env.float('SENTRY_TRACES_SAMPLE_RATE', default=0.25 if not DEBUG else 1.0)
+SENTRY_PROFILES_SAMPLE_RATE = env.float('SENTRY_PROFILES_SAMPLE_RATE', default=0.1 if not DEBUG else 1.0)
+SENTRY_RELEASE = env('SENTRY_RELEASE', default='blinkist-backend@1.0.0')
+
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+        from sentry_sdk.integrations.celery import CeleryIntegration
+        from sentry_sdk.integrations.redis import RedisIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+        import logging
+
+        sentry_logging = LoggingIntegration(
+            level=logging.INFO,
+            event_level=logging.ERROR,
+        )
+
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=SENTRY_ENVIRONMENT,
+            release=SENTRY_RELEASE,
+            integrations=[
+                DjangoIntegration(transaction_style='url'),
+                CeleryIntegration(monitor_beat_tasks=True),
+                RedisIntegration(),
+                sentry_logging,
+            ],
+            traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+            profiles_sample_rate=SENTRY_PROFILES_SAMPLE_RATE,
+            send_default_pii=False,
+            enable_tracing=True,
+        )
+    except ImportError:
+        pass
 
 # AI Pipeline Settings
 OPENAI_API_KEY = env('OPENAI_API_KEY', default='')

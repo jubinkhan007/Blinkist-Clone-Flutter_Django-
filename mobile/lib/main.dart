@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/core/routing/app_router.dart';
+import 'package:mobile/core/monitoring/app_monitoring.dart';
 import 'package:mobile/src/features/reader/presentation/reader_options_provider.dart';
 import 'package:mobile/src/features/reader/data/audio_handler.dart';
 
@@ -14,6 +15,7 @@ final audioHandlerProvider = Provider<AppAudioHandler>((ref) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AppMonitoring.init();
 
   try {
     await HomeWidget.setAppGroupId('group.com.blinkist.clone');
