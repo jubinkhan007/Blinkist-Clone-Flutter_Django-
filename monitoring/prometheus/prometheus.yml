@@ -3,6 +3,16 @@ global:
   evaluation_interval: 15s
   scrape_timeout: 10s
 
+# ── Alerting Rule Files ───────────────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/alert_rules.yml"
+
+# ── Prometheus Alertmanager Target ────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   # ── Django API & Prometheus Exporter ──────────────────────────────────────
   - job_name: 'django_backend'

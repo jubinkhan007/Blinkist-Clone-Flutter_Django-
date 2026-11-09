@@ -1,0 +1,57 @@
+global:
+  resolve_timeout: 5m
+
+# ── Alert Routing Tree ────────────────────────────────────────────────────────
+route:
+  group_by: ['alertname', 'service', 'severity']
+  group_wait: 30s
+  group_interval: 2m
+  repeat_interval: 3h
+  receiver: 'slack-and-discord-alerts'
+  routes:
+    # High priority critical alerts (immediate notification)
+    - match:
+        severity: critical
+      receiver: 'critical-incidents'
+      repeat_interval: 1h
+
+# ── Notification Receivers ────────────────────────────────────────────────────
+receivers:
+  # Standard alerts receiver (Slack & Discord)
+  - name: 'slack-and-discord-alerts'
+    slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL_PLACEHOLDER'
+        channel: '#alerts'
+        send_resolved: true
+        icon_emoji: ':bell:'
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity | toUpper }})'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* `{{ .Labels.severity | toUpper }}`
+          *Service:* `{{ .Labels.service }}`
+          *Description:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Runbook:* <{{ .Annotations.runbook_url }}|View Runbook>{{ end }}
+          {{ end }}
+    webhook_configs:
+      - url: 'DISCORD_WEBHOOK_URL_PLACEHOLDER/slack'
+        send_resolved: true
+
+  # Critical incidents receiver (Red priority alerts)
+  - name: 'critical-incidents'
+    slack_configs:
+      - api_url: 'SLACK_WEBHOOK_URL_PLACEHOLDER'
+        channel: '#alerts-critical'
+        send_resolved: true
+        icon_emoji: ':rotating_light:'
+        title: '🚨 [CRITICAL {{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *CRITICAL ALERT:* {{ .Annotations.summary }}
+          *Service:* `{{ .Labels.service }}`
+          *Details:* {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}*Remediation Runbook:* <{{ .Annotations.runbook_url }}|Open Runbook>{{ end }}
+          {{ end }}
+    webhook_configs:
+      - url: 'DISCORD_WEBHOOK_URL_PLACEHOLDER/slack'
+        send_resolved: true

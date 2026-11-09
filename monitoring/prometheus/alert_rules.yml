@@ -1,0 +1,64 @@
+groups:
+  - name: blinkist_api_alerts
+    rules:
+      # ── 1. Service Availability ─────────────────────────────────────────────
+      - alert: DjangoBackendDown
+        expr: up{job="django_backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+          tier: api
+        annotations:
+          summary: "Django REST API backend is unreachable"
+          description: "The Django backend container ({{ $labels.instance }}) has failed Prometheus scrape probes for over 1 minute."
+          runbook_url: "https://github.com/jubinkhan007/Blinkist-Clone-Flutter_Django-#troubleshooting"
+
+      # ── 2. Error Rate Spikes (5xx) ──────────────────────────────────────────
+      - alert: High5xxErrorRate
+        expr: (sum(rate(django_http_responses_total_by_status_total{status=~"5.."}[2m])) or vector(0)) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: api
+          tier: web
+        annotations:
+          summary: "Elevated HTTP 5xx Server Error Rate (> 0.05 req/s)"
+          description: "Django backend is serving > 0.05 HTTP 5xx errors per second (current rate: {{ $value | humanize }} err/s). Telemetry logged to Sentry."
+          runbook_url: "https://github.com/jubinkhan007/Blinkist-Clone-Flutter_Django-#5xx-errors"
+
+      # ── 3. High API Response Latency (p95) ──────────────────────────────────
+      - alert: HighApiLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[2m])) by (le)) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+          service: api
+          tier: web
+        annotations:
+          summary: "API 95th Percentile Latency Exceeds 2.0s"
+          description: "95% of API requests are taking longer than 2.0s to complete (current p95: {{ $value | humanizeDuration }})."
+
+      # ── 4. Gemini AI Pipeline Degradation ───────────────────────────────────
+      - alert: GeminiAiFailureRateHigh
+        expr: (sum(rate(blinkist_ai_queries_total{status="error"}[5m])) or vector(0)) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: ai
+          tier: background
+        annotations:
+          summary: "High Failure Rate in Gemini 'Ask the Book' AI Assistant"
+          description: "Gemini AI query failures exceed 0.1 err/s over the last 5 minutes. Verify Gemini API quota, network, and fallback synthesis."
+
+      # ── 5. Database Latency Spikes ──────────────────────────────────────────
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, sum(rate(django_db_query_duration_seconds_bucket[2m])) by (le)) > 1.0
+        for: 3m
+        labels:
+          severity: warning
+          service: database
+          tier: storage
+        annotations:
+          summary: "PostgreSQL p95 Query Duration Exceeds 1.0s"
+          description: "PostgreSQL queries are taking over 1.0s at the 95th percentile. Check query plans, active connection count, and indexing."
