@@ -1,0 +1,147 @@
+name: Continuous Deployment & Container Release
+
+on:
+  workflow_run:
+    workflows: ["Production CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target deployment environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── 1. Publish Production Images to GitHub Container Registry ───────────────
+  publish-images:
+    name: Publish Container Image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, web]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata (Tags & Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push ${{ matrix.service }} Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ── 2. Automated Server Deployment (SSH + Health Verification) ──────────────
+  deploy-server:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    needs: [publish-images]
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Check Deployment Secrets Configuration
+        id: check_secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [[ -n "$DEPLOY_HOST" && -n "$DEPLOY_USER" && -n "$DEPLOY_SSH_KEY" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## ℹ️ Automated Server Deployment Skipped"
+              echo ""
+              echo "Container images were built and published to \`ghcr.io\`, but SSH deployment secrets are not yet configured for this repository."
+              echo ""
+              echo "To enable zero-touch SSH deployments on push to \`main\`, add the following GitHub Environment Secrets under **Settings → Environments → production**:"
+              echo "- \`DEPLOY_HOST\`: Production server hostname or IP"
+              echo "- \`DEPLOY_USER\`: SSH deployment user"
+              echo "- \`DEPLOY_SSH_KEY\`: Private SSH key with access to the server"
+              echo "- \`DEPLOY_PATH\` *(optional)*: Remote repository directory (defaults to \`~/Blinkist-Clone-Flutter_Django-\`)"
+              echo "- \`DEPLOY_PORT\` *(optional)*: SSH port (defaults to \`22\`)"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy via SSH & Verify Live Health Probe
+        if: steps.check_secrets.outputs.configured == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '~/Blinkist-Clone-Flutter_Django-' }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<EOF
+            set -eo pipefail
+            cd ${DEPLOY_PATH}
+            git fetch origin main
+            git reset --hard origin/main
+            chmod +x scripts/prod-deploy.sh
+            ./scripts/prod-deploy.sh
+          EOF
+
+          rm -f ~/.ssh/deploy_key
+          {
+            echo "## 🚀 Deployment Successful"
+            echo "- **Environment:** \`${{ github.event.inputs.environment || 'production' }}\`"
+            echo "- **Commit:** \`${{ github.sha }}\`"
+            echo "- **Registry:** \`ghcr.io/${{ github.repository }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

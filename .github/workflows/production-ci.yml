@@ -5,19 +5,54 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ── Backend CI ──────────────────────────────────────────────────────────────
+  # ── 1. Backend CI Matrix (SQLite + PostgreSQL 16 + Redis 7) ─────────────────
   backend-test:
-    name: Backend Test & Quality Suite
+    name: Django Backend (${{ matrix.database }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: blinkist_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blinkist_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: ./backend
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -27,38 +62,59 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libpq-dev
+          sudo apt-get install -y --no-install-recommends libpq-dev
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Django System Check
-        run: |
-          python manage.py check
+      - name: Django System Check
+        run: python manage.py check
         env:
-          SECRET_KEY: ci-test-secret-key-12345
+          SECRET_KEY: ci-test-secret-key-at-least-50-characters-long-for-django-security-validation
           DEBUG: "True"
+          DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:ci_postgres_password@localhost:5432/blinkist_ci' || '' }}
+          REDIS_URL: redis://localhost:6379/1
+
+      - name: Verify No Uncommitted Migrations
+        run: python manage.py makemigrations --check --dry-run
+        env:
+          SECRET_KEY: ci-test-secret-key-at-least-50-characters-long-for-django-security-validation
+          DEBUG: "True"
+          DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:ci_postgres_password@localhost:5432/blinkist_ci' || '' }}
+
+      - name: Django Production Deployment Security Check
+        if: matrix.database == 'postgres'
+        run: python manage.py check --deploy --fail-level ERROR
+        env:
+          SECRET_KEY: ci-prod-deploy-check-key-with-sufficient-entropy-and-length-9876543210
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1,api.blinkist-clone.local
+          DATABASE_URL: postgresql://postgres:ci_postgres_password@localhost:5432/blinkist_ci
+          REDIS_URL: redis://localhost:6379/1
 
       - name: Run Backend Unit & Integration Tests
-        run: |
-          python manage.py test
+        run: python manage.py test --verbosity=2
         env:
-          SECRET_KEY: ci-test-secret-key-12345
+          SECRET_KEY: ci-test-secret-key-at-least-50-characters-long-for-django-security-validation
           DEBUG: "True"
+          DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgresql://postgres:ci_postgres_password@localhost:5432/blinkist_ci' || '' }}
+          REDIS_URL: redis://localhost:6379/1
 
-  # ── Web CI ──────────────────────────────────────────────────────────────────
+  # ── 2. Web Client CI (Next.js TypeCheck, Lint & Standalone Build) ───────────
   web-build:
-    name: Web Client TypeCheck & Build
+    name: Next.js Web Build & TypeCheck
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./web
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -66,62 +122,169 @@ jobs:
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
       - name: Install NPM Dependencies
         run: npm ci
 
+      - name: Run TypeScript TypeCheck
+        run: npx tsc --noEmit
+
+      - name: Run ESLint (Advisory Report)
+        continue-on-error: true
+        run: npm run lint
+
       - name: Run Next.js Production Build
         run: npm run build
         env:
-          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_TELEMETRY_DISABLED: "1"
           NODE_ENV: production
           NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
 
-  # ── Mobile CI ───────────────────────────────────────────────────────────────
-  mobile-analyze:
-    name: Flutter Mobile Static Analysis
+      - name: Verify Standalone Server Bundle
+        run: test -f .next/standalone/server.js
+
+  # ── 3. Mobile Client CI (Flutter Static Analysis & Tests) ───────────────────
+  mobile-test:
+    name: Flutter Analyze & Tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./mobile
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.35.7
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.29.0"
+          flutter-version: "3.35.7"
           channel: "stable"
           cache: true
 
       - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Run Flutter Analyzer
+      - name: Run Flutter Static Analysis
         run: flutter analyze --no-fatal-infos
 
-  # ── Docker Compose Configuration Check ──────────────────────────────────────
-  docker-validate:
-    name: Validate Docker Compose Configuration
+      - name: Run Flutter Unit & Widget Tests
+        run: flutter test --reporter expanded
+
+  # ── 4. Infrastructure, Docker Compose, Monitoring & Script Validation ───────
+  infra-validate:
+    name: Docker Compose, Monitoring & Config Validation
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Validate Docker Compose Config
-        run: |
-          docker compose config -q
+      - name: Validate Docker Compose Stack Configuration
+        run: docker compose config --quiet
         env:
           SECRET_KEY: ci-docker-secret-key
           POSTGRES_PASSWORD: ci-docker-postgres-pwd
           REDIS_PASSWORD: ci-docker-redis-pwd
+
+      - name: Validate Shell Scripts Syntax
+        run: |
+          bash -n scripts/prod-deploy.sh
+          bash -n scripts/test-alert.sh
+          bash -n scripts/ci-local.sh
+          bash -n backend/entrypoint.sh
+
+      - name: Validate Grafana Dashboard JSON
+        run: python3 -m json.tool monitoring/grafana/dashboards/blinkist_overview.json > /dev/null
+
+      - name: Validate Prometheus Config & Alert Rules
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "${{ github.workspace }}/monitoring/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v2.51.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool \
+            -v "${{ github.workspace }}/monitoring/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v2.51.0 check rules /etc/prometheus/alert_rules.yml
+
+      - name: Validate Alertmanager Routing Config
+        run: |
+          sed "s|SLACK_WEBHOOK_URL_PLACEHOLDER|https://httpbin.org/status/200|g; s|DISCORD_WEBHOOK_URL_PLACEHOLDER|https://httpbin.org/status/200|g" \
+            monitoring/alertmanager/alertmanager.yml > /tmp/alertmanager-ci.yml
+          docker run --rm --entrypoint amtool \
+            -v /tmp/alertmanager-ci.yml:/etc/alertmanager/alertmanager.yml:ro \
+            prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
+
+      - name: Validate Nginx Gateway Configuration
+        run: |
+          docker run --rm \
+            --add-host backend:127.0.0.1 \
+            --add-host web:127.0.0.1 \
+            -v "${{ github.workspace }}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:1.25-alpine nginx -t
+
+  # ── 5. Docker Production Image Build Verification ───────────────────────────
+  docker-build:
+    name: Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: [backend-test, web-build, infra-validate]
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, web]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} Production Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ── 6. Unified CI Pipeline Gate & Summary ───────────────────────────────────
+  ci-gate:
+    name: CI Pipeline Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [backend-test, web-build, mobile-test, infra-validate, docker-build]
+
+    steps:
+      - name: Generate CI Summary & Enforce Gate
+        run: |
+          {
+            echo "## 📈 Production CI Pipeline Matrix Summary"
+            echo ""
+            echo "| Stage | Result |"
+            echo "| :--- | :---: |"
+            echo "| **Django Backend (SQLite + PostgreSQL 16)** | \`${{ needs.backend-test.result }}\` |"
+            echo "| **Next.js Web (TypeCheck & Standalone Build)** | \`${{ needs.web-build.result }}\` |"
+            echo "| **Flutter Mobile (Analyze & Unit Tests)** | \`${{ needs.mobile-test.result }}\` |"
+            echo "| **Infrastructure (Compose, Promtool, Amtool, Nginx)** | \`${{ needs.infra-validate.result }}\` |"
+            echo "| **Docker Production Images (Backend & Web)** | \`${{ needs.docker-build.result }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ needs.backend-test.result }}" != "success" || \
+                "${{ needs.web-build.result }}" != "success" || \
+                "${{ needs.mobile-test.result }}" != "success" || \
+                "${{ needs.infra-validate.result }}" != "success" || \
+                "${{ needs.docker-build.result }}" != "success" ]]; then
+            echo "❌ One or more CI pipeline stages failed."
+            exit 1
+          fi
+          echo "✅ All CI pipeline stages passed!"
