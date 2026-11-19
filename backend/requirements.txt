@@ -52,7 +52,7 @@ jmespath==1.1.0
 kombu==5.6.2
 lxml==6.1.1
 multidict==6.7.1
-mutagen==1.47.0
+mutagen==1.48.1
 openai==2.38.0
 packaging==24.2
 pillow==11.3.0
