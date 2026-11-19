@@ -59,7 +59,7 @@ pillow==11.3.0
 pinecone==7.3.0
 pinecone-plugin-assistant==1.8.0
 pinecone-plugin-interface==0.0.7
-prompt_toolkit==3.0.52
+prompt_toolkit==3.0.53
 propcache==0.4.1
 proto-plus==1.27.2
 protobuf==5.29.6
