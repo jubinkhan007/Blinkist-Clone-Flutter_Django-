@@ -136,20 +136,56 @@ services:
     networks:
       - blinkist_net
 
-  # ── Nginx Gateway & Reverse Proxy ────────────────────────────────────────────
+  # ── Nginx Hardened Gateway, Reverse Proxy & TLS Terminator ───────────────────
   nginx:
     image: nginx:1.25-alpine
     container_name: blinkist_gateway
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/docker-entrypoint-ssl.sh"]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
       - "${PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.http.conf:ro
+      - ./nginx/nginx.ssl.conf.template:/etc/nginx/nginx.ssl.conf.template:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/docker-entrypoint.sh:/docker-entrypoint-ssl.sh:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
       - backend_media:/app/media:ro
       - backend_static:/app/staticfiles:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend
       - web
+    networks:
+      - blinkist_net
+
+  # ── Certbot Let's Encrypt Auto-Renewal Sidecar (Every 12h) ───────────────────
+  certbot:
+    image: certbot/certbot:v2.11.0
+    container_name: blinkist_certbot
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          certbot renew --webroot -w /var/www/certbot --quiet || true
+          sleep 12h & wait $${!}
+        done
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - nginx
     networks:
       - blinkist_net
 
@@ -232,6 +268,8 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  certbot_conf:
+  certbot_www:
 
 networks:
   blinkist_net:

@@ -1,0 +1,131 @@
+events {
+    worker_connections 2048;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Hardening: hide Nginx version string
+    server_tokens off;
+
+    # Performance & Request Limits
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    client_max_body_size 50M;
+    client_body_timeout 15s;
+    client_header_timeout 15s;
+    send_timeout 30s;
+
+    # Compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 256;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        application/json
+        application/javascript
+        application/rss+xml
+        application/atom+xml
+        image/svg+xml
+        font/woff2;
+
+    # Multi-Tier Rate Limiting & Connection Throttling (HTTP 429 on exceed)
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/s;
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=30r/s;
+    limit_req_zone $binary_remote_addr zone=web_limit:10m rate=60r/s;
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+
+    # Scheme-Aware Security Header Maps (HSTS Preload + CSP Upgrade)
+    map $scheme $hsts_header {
+        https   "max-age=63072000; includeSubDomains; preload";
+        default "";
+    }
+
+    map $scheme $csp_header {
+        https   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: data: https:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;";
+        default "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: data: https:; connect-src 'self' http: https: ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';";
+    }
+
+    # Upstreams
+    upstream backend_upstream {
+        server backend:8000;
+        keepalive 32;
+    }
+
+    upstream web_upstream {
+        server web:3000;
+        keepalive 32;
+    }
+
+    # ── 1. HTTP Port 80: ACME Challenges + Permanent HTTPS Redirect ───────────
+    server {
+        listen 80;
+        server_name ${DOMAIN} www.${DOMAIN};
+
+        # Let's Encrypt ACME HTTP-01 Renewal Challenges
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+            default_type "text/plain";
+            try_files $uri =404;
+        }
+
+        # Internal Docker / Load Balancer Health Check over HTTP
+        location = /healthz {
+            access_log off;
+            proxy_pass http://backend_upstream/healthz/;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $host;
+        }
+
+        # Redirect all other HTTP traffic permanently to HTTPS
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # ── 2. HTTPS Port 443: Hardened TLS 1.2 / 1.3 Production Gateway ──────────
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name ${DOMAIN} www.${DOMAIN};
+
+        # Let's Encrypt Certificates
+        ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+        ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
+
+        # Modern TLS Protocol & Cipher Suite (Mozilla Intermediate/Modern)
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+        ssl_prefer_server_ciphers off;
+        ssl_ecdh_curve X25519:prime256v1:secp384r1;
+
+        # TLS Session Resumption & Forward Secrecy
+        ssl_session_timeout 1d;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_tickets off;
+
+        # OCSP Stapling
+        ssl_stapling on;
+        ssl_stapling_verify on;
+        resolver 1.1.1.1 8.8.8.8 valid=300s;
+        resolver_timeout 5s;
+
+        # Production Security Headers (HSTS Preload, CSP, X-Frame-Options, etc.)
+        include /etc/nginx/snippets/security-headers.conf;
+
+        # Shared Rate-Limited & Hardened Proxy Routes
+        include /etc/nginx/snippets/proxy-locations.conf;
+    }
+}

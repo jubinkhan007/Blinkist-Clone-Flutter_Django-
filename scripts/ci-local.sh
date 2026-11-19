@@ -88,7 +88,8 @@ if [ "$RUN_INFRA" -eq 1 ]; then
   SECRET_KEY="ci-docker-secret" POSTGRES_PASSWORD="ci-pg-pwd" REDIS_PASSWORD="ci-redis-pwd" \
     docker compose config --quiet
   bash -n "$ROOT_DIR/scripts/prod-deploy.sh" "$ROOT_DIR/scripts/test-alert.sh" \
-    "$ROOT_DIR/scripts/ci-local.sh" "$ROOT_DIR/backend/entrypoint.sh"
+    "$ROOT_DIR/scripts/ci-local.sh" "$ROOT_DIR/scripts/init-letsencrypt.sh" \
+    "$ROOT_DIR/nginx/docker-entrypoint.sh" "$ROOT_DIR/backend/entrypoint.sh"
   python3 -m json.tool "$ROOT_DIR/monitoring/grafana/dashboards/blinkist_overview.json" >/dev/null
   echo "✅ Infrastructure & config validation passed!"
 fi

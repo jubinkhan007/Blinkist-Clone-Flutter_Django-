@@ -201,6 +201,8 @@ jobs:
           bash -n scripts/prod-deploy.sh
           bash -n scripts/test-alert.sh
           bash -n scripts/ci-local.sh
+          bash -n scripts/init-letsencrypt.sh
+          bash -n nginx/docker-entrypoint.sh
           bash -n backend/entrypoint.sh
 
       - name: Validate Grafana Dashboard JSON
@@ -223,13 +225,32 @@ jobs:
             -v /tmp/alertmanager-ci.yml:/etc/alertmanager/alertmanager.yml:ro \
             prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
 
-      - name: Validate Nginx Gateway Configuration
+      - name: Validate Nginx Gateway Configuration (HTTP & TLS/SSL Modes)
         run: |
           docker run --rm \
             --add-host backend:127.0.0.1 \
             --add-host web:127.0.0.1 \
             -v "${{ github.workspace }}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "${{ github.workspace }}/nginx/snippets:/etc/nginx/snippets:ro" \
             nginx:1.25-alpine nginx -t
+
+          docker run --rm \
+            --add-host backend:127.0.0.1 \
+            --add-host web:127.0.0.1 \
+            -v "${{ github.workspace }}/nginx/nginx.ssl.conf.template:/etc/nginx/nginx.ssl.conf.template:ro" \
+            -v "${{ github.workspace }}/nginx/snippets:/etc/nginx/snippets:ro" \
+            nginx:1.25-alpine /bin/sh -c '
+              set -eu
+              apk add --no-cache openssl >/dev/null 2>&1
+              mkdir -p /etc/letsencrypt/live/example.com
+              openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+                -keyout /etc/letsencrypt/live/example.com/privkey.pem \
+                -out /etc/letsencrypt/live/example.com/fullchain.pem \
+                -subj "/CN=example.com" >/dev/null 2>&1
+              cp /etc/letsencrypt/live/example.com/fullchain.pem /etc/letsencrypt/live/example.com/chain.pem
+              DOMAIN=example.com envsubst "\${DOMAIN}" < /etc/nginx/nginx.ssl.conf.template > /etc/nginx/nginx.conf
+              nginx -t
+            '
 
   # ── 5. Docker Production Image Build Verification ───────────────────────────
   docker-build:
